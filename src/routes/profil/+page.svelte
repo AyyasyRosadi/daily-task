@@ -238,6 +238,25 @@
 </section>
 
 <section class="card mt-4">
+  <h2 class="font-semibold">Timer istirahat</h2>
+  <p class="mt-1 text-xs text-mute">
+    Hitungan mundur otomatis mulai setiap kali kamu menandai satu set selesai.
+  </p>
+  <div class="mt-3 flex gap-2">
+    {#each [60, 90, 120, 180] as detik}
+      <button
+        class="chip flex-1 {($profile?.restSeconds ?? 90) === detik
+          ? 'bg-plate-yellow text-rubber'
+          : 'bg-rack text-mute'}"
+        onclick={() => saveProfile({ restSeconds: detik })}
+      >
+        {detik < 60 ? `${detik}d` : `${detik / 60} mnt`}
+      </button>
+    {/each}
+  </div>
+</section>
+
+<section class="card mt-4">
   <h2 class="font-semibold">Pengingat latihan</h2>
   <p class="mt-1 text-xs text-mute">
     Notifikasi harian dari browser pada jam yang kamu pilih.

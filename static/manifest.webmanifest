@@ -1,0 +1,24 @@
+{
+  "name": "Gym Daily",
+  "short_name": "Gym Daily",
+  "description": "Pencatat latihan gym harian: program, beban per set, streak, nutrisi, dan progres.",
+  "lang": "id",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0F1412",
+  "theme_color": "#0F1412",
+  "categories": ["health", "fitness", "lifestyle"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Hari ini", "url": "/", "description": "Latihan yang dijadwalkan hari ini" },
+    { "name": "Progres", "url": "/progress", "description": "Grafik beban dan berat badan" },
+    { "name": "Riwayat", "url": "/riwayat", "description": "Sesi yang sudah tercatat" }
+  ]
+}

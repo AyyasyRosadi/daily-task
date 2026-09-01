@@ -4,10 +4,13 @@
   import { getProgram } from '$lib/data/programs.js';
   import { user } from '$lib/stores/auth';
   import {
+    addSet,
     completeRestDay,
     dayKey,
     ensureLog,
+    logSet,
     profile,
+    removeSet,
     resetToday,
     saveNote,
     toggleTask,
@@ -17,8 +20,10 @@
     todayLog,
     yearLogs
   } from '$lib/stores/data';
+  import { DEFAULT_REST_SECONDS, startRest } from '$lib/stores/rest';
   import { dayShort, formatLong, keyToDate, weekKeys } from '$lib/utils/date';
   import { waterGlasses } from '$lib/utils/nutrition';
+  import { lastPerformance, logVolume, personalRecord, trimNumber } from '$lib/utils/workout';
 
   const program = $derived(getProgram($profile?.activeProgram));
   const tasks = $derived($todayLog?.tasks ?? []);
@@ -34,6 +39,22 @@
       future: key > $dayKey
     }))
   );
+
+  const volume = $derived(logVolume($todayLog));
+
+  let openTask = $state(null);
+  const toggleExpand = (id) => (openTask = openTask === id ? null : id);
+
+  /**
+   * Menandai set selesai langsung memulai hitungan istirahat, kecuali set terakhir
+   * gerakan itu — saat itu istirahatnya sudah beralih ke gerakan berikutnya.
+   */
+  async function handleLogSet(taskId, index, patch) {
+    await logSet(taskId, index, patch);
+    if (!patch.done) return;
+    const task = ($todayLog?.tasks ?? []).find((t) => t.id === taskId);
+    startRest($profile?.restSeconds ?? DEFAULT_REST_SECONDS, task?.name ?? '');
+  }
 
   let note = $state('');
   let noteLoaded = false;
@@ -74,7 +95,11 @@
 
 <section class="mt-5 flex justify-between gap-1">
   {#each week as d}
-    <div class="flex flex-1 flex-col items-center gap-1.5">
+    <a
+      href="/riwayat?d={d.key}"
+      class="flex flex-1 flex-col items-center gap-1.5"
+      aria-label={`Lihat catatan ${d.key}`}
+    >
       <span class="text-[10px] {d.isToday ? 'text-chalk' : 'text-mute'}">{d.day}</span>
       <span
         class="h-8 w-full rounded-md border {d.isToday ? 'border-plate-yellow/60' : 'border-white/5'}"
@@ -87,7 +112,7 @@
               : 'rgba(241,238,231,0.08)'}"
         title={d.key}
       ></span>
-    </div>
+    </a>
   {/each}
 </section>
 
@@ -137,9 +162,25 @@
 
       <div class="mt-4 space-y-2">
         {#each tasks as task (task.id)}
-          <TaskRow {task} ontoggle={toggleTask} />
+          <TaskRow
+            {task}
+            ontoggle={toggleTask}
+            onlogset={handleLogSet}
+            onaddset={addSet}
+            onremoveset={removeSet}
+            last={lastPerformance($yearLogs, task.name, $dayKey)}
+            record={personalRecord($yearLogs, task.name)}
+            expanded={openTask === task.id}
+            ontoggleexpand={toggleExpand}
+          />
         {/each}
       </div>
+
+      {#if volume > 0}
+        <p class="mt-3 text-center text-xs text-mute">
+          Volume sesi ini <span class="num text-chalk">{trimNumber(volume, 0)}</span> kg terangkat
+        </p>
+      {/if}
 
       {#if percent === 100}
         <p class="mt-4 rounded-xl bg-plate-green/15 px-4 py-3 text-center text-sm text-plate-green">

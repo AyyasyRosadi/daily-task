@@ -6,8 +6,10 @@
   import { firebaseReady } from '$lib/firebase';
   import { authReady, user } from '$lib/stores/auth';
   import { refreshDay, startSync, stopSync } from '$lib/stores/data';
-  import { startReminderScheduler } from '$lib/stores/notifications';
+  import { ensureServiceWorker, notify, startReminderScheduler } from '$lib/stores/notifications';
+  import { onRestFinished } from '$lib/stores/rest';
   import Nav from '$lib/components/Nav.svelte';
+  import RestTimer from '$lib/components/RestTimer.svelte';
   import SetupNotice from '$lib/components/SetupNotice.svelte';
 
   let { children } = $props();
@@ -25,10 +27,18 @@
   });
 
   onMount(() => {
+    // Daftarkan lebih awal supaya cangkang aplikasi tersimpan sebelum sinyal hilang.
+    ensureServiceWorker();
+
     const tick = () => refreshDay();
     document.addEventListener('visibilitychange', tick);
     const timer = setInterval(tick, 60_000);
     const stopReminders = startReminderScheduler();
+
+    onRestFinished(({ label }) => {
+      navigator.vibrate?.([200, 100, 200]);
+      notify('Istirahat selesai', label ? `Lanjut set ${label}.` : 'Lanjut set berikutnya.');
+    });
     return () => {
       document.removeEventListener('visibilitychange', tick);
       clearInterval(timer);
@@ -46,6 +56,6 @@
     <main class="mx-auto w-full max-w-lg px-4 pb-28 pt-7">
       {@render children()}
     </main>
-    {#if $user}<Nav />{/if}
+    {#if $user}<RestTimer /><Nav />{/if}
   </div>
 {/if}

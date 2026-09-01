@@ -1,15 +1,36 @@
 import { derived, get, writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { collection, doc, onSnapshot, query, setDoc, updateDoc, where } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  getDocs,
+  onSnapshot,
+  query,
+  setDoc,
+  updateDoc,
+  where
+} from 'firebase/firestore';
 import { db } from '$lib/firebase';
 import { dateKey, keyToDate, shiftKey } from '$lib/utils/date';
 import { sessionForDate, tasksFromSession } from '$lib/data/programs';
+import { emptySet, setsOf } from '$lib/utils/workout';
 
 export const profile = writable(null);
 export const yearLogs = writable([]);
 export const weights = writable([]);
 export const syncing = writable(true);
 export const dayKey = writable(dateKey());
+
+/** Log tahun-tahun sebelumnya, dimuat sekali jalan saat halaman Riwayat memintanya. */
+export const archiveLogs = writable([]);
+const loadedYears = new Set();
+
+/** Semua log yang tersedia di klien: tahun berjalan + arsip yang sudah dimuat. */
+export const allLogs = derived([yearLogs, archiveLogs], ([$year, $archive]) => {
+  const byId = new Map();
+  for (const log of [...$archive, ...$year]) byId.set(log.id, log);
+  return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
+});
 
 let uid = null;
 let unsubs = [];
@@ -42,7 +63,8 @@ function defaultProfile() {
     lastDoneDate: null,
     reminderEnabled: false,
     reminderTime: '18:00',
-    reminderOnRestDays: false
+    reminderOnRestDays: false,
+    restSeconds: 90
   };
 }
 
@@ -53,7 +75,33 @@ export function stopSync() {
   profile.set(null);
   yearLogs.set([]);
   weights.set([]);
+  archiveLogs.set([]);
+  loadedYears.clear();
   syncing.set(true);
+}
+
+/**
+ * Muat log satu tahun penuh sekali jalan. Tahun berjalan sudah ditangani
+ * langganan realtime, jadi tidak perlu diambil ulang.
+ */
+export async function loadYear(year) {
+  if (!uid || !db) return;
+  if (year === new Date().getFullYear() || loadedYears.has(year)) return;
+  loadedYears.add(year);
+  try {
+    const snap = await getDocs(
+      query(
+        collection(db, 'users', uid, 'logs'),
+        where('date', '>=', `${year}-01-01`),
+        where('date', '<=', `${year}-12-31`)
+      )
+    );
+    const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    archiveLogs.update((prev) => [...prev.filter((l) => !l.id.startsWith(`${year}-`)), ...rows]);
+  } catch {
+    // Gagal memuat arsip tidak boleh merusak halaman; tahun itu bisa diminta lagi.
+    loadedYears.delete(year);
+  }
 }
 
 export function startSync(nextUid) {
@@ -162,13 +210,64 @@ async function markStreak(key) {
   });
 }
 
-export async function toggleTask(taskId) {
-  const log = get(todayLog);
-  if (!log) return;
-  const tasks = log.tasks.map((t) => (t.id === taskId ? { ...t, done: !t.done } : t));
+/** Simpan daftar tugas yang sudah diubah, lalu perbarui status selesai sesi. */
+async function commitTasks(log, tasks) {
   const completed = tasks.length > 0 && tasks.every((t) => t.done);
   await updateDoc(logRef(log.id), { tasks, completed });
   if (completed) await markStreak(log.id);
+}
+
+export async function toggleTask(taskId) {
+  const log = get(todayLog);
+  if (!log) return;
+  const tasks = log.tasks.map((t) => {
+    if (t.id !== taskId) return t;
+    const next = !t.done;
+    // Mencentang seluruh gerakan ikut menandai semua setnya, dan sebaliknya.
+    return { ...t, done: next, logs: setsOf(t).map((s) => ({ ...s, done: next })) };
+  });
+  await commitTasks(log, tasks);
+}
+
+/**
+ * Catat satu set: beban, repetisi, atau status selesainya.
+ * Gerakan dianggap selesai begitu semua setnya ditandai.
+ */
+export async function logSet(taskId, index, patch) {
+  const log = get(todayLog);
+  if (!log) return;
+  const tasks = log.tasks.map((t) => {
+    if (t.id !== taskId) return t;
+    const sets = setsOf(t).map((s, i) => (i === index ? { ...s, ...patch } : s));
+    return { ...t, logs: sets, done: sets.length > 0 && sets.every((s) => s.done) };
+  });
+  await commitTasks(log, tasks);
+}
+
+/** Tambah satu set di luar target program, untuk sesi yang terasa ringan. */
+export async function addSet(taskId) {
+  const log = get(todayLog);
+  if (!log) return;
+  const tasks = log.tasks.map((t) => {
+    if (t.id !== taskId) return t;
+    const sets = [...setsOf(t), emptySet()];
+    return { ...t, logs: sets, done: false };
+  });
+  await commitTasks(log, tasks);
+}
+
+/** Buang set terakhir. Target set bawaan program tidak bisa dikurangi di bawah satu. */
+export async function removeSet(taskId) {
+  const log = get(todayLog);
+  if (!log) return;
+  const tasks = log.tasks.map((t) => {
+    if (t.id !== taskId) return t;
+    const sets = setsOf(t);
+    if (sets.length <= 1) return t;
+    const next = sets.slice(0, -1);
+    return { ...t, logs: next, done: next.every((s) => s.done) };
+  });
+  await commitTasks(log, tasks);
 }
 
 export async function completeRestDay() {

@@ -12,7 +12,14 @@ siap dideploy ke Vercel.
   Streak putus sendiri kalau ada hari yang terlewat.
 - **Program** — 5 program siap pakai (Full Body Pemula, Push Pull Legs, Upper Lower, Kalistenik di
   Rumah, Bakar Lemak). Pilih satu, jadwalnya langsung mengikuti hari.
-- **Progres** — rekap minggu berjalan, grafik 12 bulan, rekor streak, dan grafik berat badan.
+- **Catatan beban per set** — isi beban dan repetisi tiap set, bukan sekadar centang. Beban set
+  sebelumnya dan rekor pribadi tampil sebagai acuan, dan set bisa ditambah/dikurangi saat sesi.
+- **Timer istirahat** — hitungan mundur otomatis begitu satu set ditandai selesai, lengkap dengan
+  getar dan notifikasi. Durasinya diatur di Profil (60/90/120/180 detik).
+- **Riwayat** — kalender bulanan yang bisa dibuka per tanggal: rincian set, volume, air minum,
+  berat badan, dan catatan sesi. Tahun sebelumnya dimuat sekali jalan saat bulannya dibuka.
+- **Progres** — rekap minggu berjalan, grafik 12 bulan, rekor streak, grafik berat badan, serta
+  grafik beban per gerakan dengan perkiraan 1RM (Epley) dan rekor pribadi.
 - **Nutrisi** — kalkulator kalori (Mifflin-St Jeor) + target makro dan menu harian per tujuan.
 - **Tips** — kumpulan tips latihan, nutrisi, istirahat, dan kebiasaan.
 - **Profil** — data diri dan data tubuh, ringkasan streak, program aktif, pengaturan pengingat, dan
@@ -22,6 +29,9 @@ siap dideploy ke Vercel.
 - **Sambungan kalender** — jadwal program diekspor sebagai acara berulang (`RRULE` mingguan) dengan
   alarm 30 menit sebelum mulai. Berkas `.ics` untuk Apple Calendar, plus tautan langsung ke Google
   Calendar untuk Android. Alarm kalender tetap berbunyi walau aplikasi tertutup.
+- **Bisa dipasang & jalan offline** — `manifest.webmanifest` + service worker (`static/sw.js`) yang
+  menyimpan cangkang aplikasi dan aset ber-hash, ditambah cache permanen Firestore. Latihan tetap
+  bisa dicatat tanpa sinyal dan tersinkron sendiri saat koneksi kembali.
 
 ## 1. Siapkan Firebase
 
@@ -86,16 +96,21 @@ domains**. Kalau dilewat, login akan ditolak di production.
 users/{uid}
   name, activeProgram, programStartedAt, goal, activity,
   sex, age, height, weight, streak, bestStreak, lastDoneDate,
-  reminderEnabled, reminderTime, reminderOnRestDays
+  reminderEnabled, reminderTime, reminderOnRestDays, restSeconds
 
 users/{uid}/logs/{YYYY-MM-DD}
   date, programId, title, focus, minutes, isRest,
-  tasks: [{ id, name, sets, reps, group, done }],
+  tasks: [{ id, name, sets, reps, group, done,
+            logs: [{ kg, reps, done }] }],
   water, note, completed
 
 users/{uid}/weights/{YYYY-MM-DD}
   date, kg
 ```
+
+`logs[]` di dalam `tasks` menyimpan beban dan repetisi aktual per set. Catatan lama yang belum
+punya field ini tetap terbaca: seluruh fungsi di `src/lib/utils/workout.js` memperlakukan `logs`
+yang hilang sebagai set kosong, jadi tidak perlu migrasi data.
 
 ## Menambah program sendiri
 

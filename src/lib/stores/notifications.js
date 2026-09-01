@@ -15,7 +15,7 @@ export const permission = writable(notificationsSupported ? Notification.permiss
  */
 let swRegistration = null;
 
-async function ensureServiceWorker() {
+export async function ensureServiceWorker() {
   if (!browser || !('serviceWorker' in navigator)) return null;
   if (swRegistration) return swRegistration;
   try {
@@ -63,6 +63,9 @@ async function show(title, body) {
     return false;
   }
 }
+
+/** Kirim notifikasi sekali jalan, dipakai juga oleh timer istirahat. */
+export const notify = show;
 
 export function sendTestNotification() {
   return show('Gym Daily', 'Pengingat sudah aktif. Sampai jumpa di jam latihanmu.');

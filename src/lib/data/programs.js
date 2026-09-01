@@ -380,6 +380,8 @@ export function tasksFromSession(session) {
     sets: ex.sets,
     reps: ex.reps,
     group: ex.group,
-    done: false
+    done: false,
+    // Satu slot kosong per set, siap diisi beban dan repetisi aktual.
+    logs: Array.from({ length: ex.sets }, () => ({ kg: null, reps: null, done: false }))
   }));
 }

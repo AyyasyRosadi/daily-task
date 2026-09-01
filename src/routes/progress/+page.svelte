@@ -2,6 +2,7 @@
   import StatTile from '$lib/components/StatTile.svelte';
   import { logWeight, dayKey, profile, streak, weights, yearLogs } from '$lib/stores/data';
   import { dayShort, keyToDate, monthShort, weekKeys } from '$lib/utils/date';
+  import { exerciseHistory, exerciseNames, personalRecord, trimNumber } from '$lib/utils/workout';
 
   const year = new Date().getFullYear();
 
@@ -51,6 +52,43 @@
     return { path, first: points[0], last: points[points.length - 1], min, max };
   });
 
+  // --- Beban per gerakan ---
+
+  const liftNames = $derived(exerciseNames($yearLogs));
+  let liftName = $state('');
+
+  // Pilih gerakan pertama begitu ada datanya, lalu biarkan pilihan pengguna bertahan.
+  $effect(() => {
+    if (!liftName && liftNames.length) liftName = liftNames[0];
+  });
+
+  const liftHistory = $derived(liftName ? exerciseHistory($yearLogs, liftName) : []);
+  const liftRecord = $derived(liftName ? personalRecord($yearLogs, liftName) : null);
+
+  const liftChart = $derived.by(() => {
+    const points = liftHistory.slice(-20);
+    if (points.length < 2) return null;
+    const values = points.map((p) => p.topKg);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const span = max - min || 1;
+    const pad = span * 0.15;
+    const lo = min - pad;
+    const hi = max + pad;
+    const coords = points.map((p, i) => ({
+      x: (i / (points.length - 1)) * 300,
+      y: 70 - ((p.topKg - lo) / (hi - lo)) * 60,
+      point: p
+    }));
+    return {
+      coords,
+      path: coords.map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x.toFixed(1)} ${c.y.toFixed(1)}`).join(' '),
+      first: points[0],
+      last: points[points.length - 1],
+      gain: points[points.length - 1].topKg - points[0].topKg
+    };
+  });
+
   let kg = $state('');
   let saved = $state(false);
 
@@ -67,6 +105,7 @@
 <header>
   <h1 class="num text-3xl font-bold">Progres</h1>
   <p class="mt-1 text-sm text-mute">Rekap kehadiran latihan dan perubahan berat badan tahun {year}.</p>
+  <a class="btn-ghost mt-3 w-full" href="/riwayat">Buka riwayat harian</a>
 </header>
 
 <div class="mt-5 grid grid-cols-2 gap-3">
@@ -117,6 +156,84 @@
       </li>
     {/each}
   </ul>
+</section>
+
+<section class="card mt-4">
+  <h2 class="font-semibold">Beban per gerakan</h2>
+
+  {#if !liftNames.length}
+    <p class="mt-3 text-sm text-mute">
+      Belum ada beban yang tercatat. Buka gerakan di halaman Hari ini, isi beban dan repetisi tiap
+      set, lalu grafik kemajuannya muncul di sini.
+    </p>
+  {:else}
+    <select class="field mt-3 text-sm" bind:value={liftName} aria-label="Pilih gerakan">
+      {#each liftNames as name}
+        <option value={name}>{name}</option>
+      {/each}
+    </select>
+
+    <div class="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
+      <div class="rounded-xl bg-rack py-2">
+        <p class="num text-xl font-bold text-plate-yellow">
+          {liftRecord ? trimNumber(liftRecord.topKg) : '—'}
+        </p>
+        <p class="text-mute">rekor kg</p>
+      </div>
+      <div class="rounded-xl bg-rack py-2">
+        <p class="num text-xl font-bold text-plate-blue">
+          {liftHistory.at(-1)?.est1RM ? trimNumber(liftHistory.at(-1).est1RM, 0) : '—'}
+        </p>
+        <p class="text-mute">perkiraan 1RM</p>
+      </div>
+      <div class="rounded-xl bg-rack py-2">
+        <p class="num text-xl font-bold text-plate-green">{liftHistory.length}</p>
+        <p class="text-mute">sesi</p>
+      </div>
+    </div>
+
+    {#if liftChart}
+      <svg viewBox="0 0 300 80" class="mt-4 w-full" role="img" aria-label={`Grafik beban ${liftName}`}>
+        <path
+          d={liftChart.path}
+          fill="none"
+          stroke="#31A05F"
+          stroke-width="2"
+          stroke-linejoin="round"
+          stroke-linecap="round"
+        />
+        {#each liftChart.coords as c}
+          <circle cx={c.x} cy={c.y} r="2.5" fill="#31A05F" />
+        {/each}
+      </svg>
+      <p class="text-xs text-mute">
+        {trimNumber(liftChart.first.topKg)} kg pada {liftChart.first.date} sampai
+        {trimNumber(liftChart.last.topKg)} kg pada {liftChart.last.date}
+        {#if liftChart.gain !== 0}
+          <span class={liftChart.gain > 0 ? 'text-plate-green' : 'text-plate-red'}>
+            ({liftChart.gain > 0 ? '+' : ''}{trimNumber(liftChart.gain)} kg)
+          </span>
+        {/if}
+      </p>
+    {:else}
+      <p class="mt-3 text-xs text-mute">
+        Catat gerakan ini minimal di dua sesi berbeda untuk melihat grafiknya.
+      </p>
+    {/if}
+
+    {#if liftHistory.length}
+      <ul class="mt-4 space-y-2 border-t border-white/5 pt-3">
+        {#each liftHistory.slice(-5).reverse() as row (row.date)}
+          <li class="flex items-baseline justify-between gap-3 text-xs">
+            <span class="num shrink-0 text-mute">{row.date}</span>
+            <span class="num min-w-0 flex-1 truncate text-right">
+              {row.sets.map((s) => `${trimNumber(s.kg)}×${s.reps ?? '—'}`).join('  ')}
+            </span>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  {/if}
 </section>
 
 <section class="card mt-4">

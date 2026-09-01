@@ -1,6 +1,12 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager
+} from 'firebase/firestore';
+import { browser } from '$app/environment';
 import { env } from '$env/dynamic/public';
 
 const config = {
@@ -18,4 +24,23 @@ export const firebaseReady = Boolean(config.apiKey && config.projectId && config
 const app = firebaseReady ? (getApps()[0] ?? initializeApp(config)) : null;
 
 export const auth = app ? getAuth(app) : null;
-export const db = app ? getFirestore(app) : null;
+
+/**
+ * Cache lokal permanen supaya data latihan tetap terbaca dan bisa ditulis saat
+ * offline; Firestore menyinkronkan sendiri begitu koneksi kembali. Gym sering
+ * berada di basement tanpa sinyal, jadi ini bukan kemewahan.
+ */
+function createDb() {
+  if (!app) return null;
+  if (!browser) return getFirestore(app);
+  try {
+    return initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+    });
+  } catch {
+    // Mode privat atau browser tanpa IndexedDB: jalan tanpa cache permanen.
+    return getFirestore(app);
+  }
+}
+
+export const db = createDb();
