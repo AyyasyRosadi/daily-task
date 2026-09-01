@@ -6,6 +6,7 @@
   import { firebaseReady } from '$lib/firebase';
   import { authReady, user } from '$lib/stores/auth';
   import { refreshDay, startSync, stopSync } from '$lib/stores/data';
+  import { startReminderScheduler } from '$lib/stores/notifications';
   import Nav from '$lib/components/Nav.svelte';
   import SetupNotice from '$lib/components/SetupNotice.svelte';
 
@@ -27,9 +28,11 @@
     const tick = () => refreshDay();
     document.addEventListener('visibilitychange', tick);
     const timer = setInterval(tick, 60_000);
+    const stopReminders = startReminderScheduler();
     return () => {
       document.removeEventListener('visibilitychange', tick);
       clearInterval(timer);
+      stopReminders();
     };
   });
 </script>

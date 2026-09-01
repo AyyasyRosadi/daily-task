@@ -6,7 +6,8 @@
     { href: '/programs', label: 'Program', d: 'M5 6h14M5 12h14M5 18h9' },
     { href: '/progress', label: 'Progres', d: 'M4 19V9m5 10V5m5 14v-7m5 7V8' },
     { href: '/nutrisi', label: 'Nutrisi', d: 'M12 8c0-2.5 2-4 4-4 0 2.5-1.7 4-4 4zm0 0c-1.4-1.6-4.4-2.2-6.2-.4C3.6 9.7 4.3 14 6.6 17.4 8 19.5 10 21 12 21s4-1.5 5.4-3.6c2.3-3.4 3-7.7.8-9.8-1.8-1.8-4.8-1.2-6.2.4z' },
-    { href: '/tips', label: 'Tips', d: 'M9 18h6m-5 3h4M12 3a6 6 0 0 0-3.5 10.9c.5.4.8 1 .8 1.6h5.4c0-.6.3-1.2.8-1.6A6 6 0 0 0 12 3z' }
+    { href: '/tips', label: 'Tips', d: 'M9 18h6m-5 3h4M12 3a6 6 0 0 0-3.5 10.9c.5.4.8 1 .8 1.6h5.4c0-.6.3-1.2.8-1.6A6 6 0 0 0 12 3z' },
+    { href: '/profil', label: 'Profil', d: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-8 9a8 8 0 0 1 16 0' }
   ];
 
   const active = $derived($page.url.pathname);

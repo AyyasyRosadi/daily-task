@@ -39,7 +39,10 @@ function defaultProfile() {
     weight: null,
     streak: 0,
     bestStreak: 0,
-    lastDoneDate: null
+    lastDoneDate: null,
+    reminderEnabled: false,
+    reminderTime: '18:00',
+    reminderOnRestDays: false
   };
 }
 

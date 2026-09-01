@@ -15,6 +15,13 @@ siap dideploy ke Vercel.
 - **Progres** — rekap minggu berjalan, grafik 12 bulan, rekor streak, dan grafik berat badan.
 - **Nutrisi** — kalkulator kalori (Mifflin-St Jeor) + target makro dan menu harian per tujuan.
 - **Tips** — kumpulan tips latihan, nutrisi, istirahat, dan kebiasaan.
+- **Profil** — data diri dan data tubuh, ringkasan streak, program aktif, pengaturan pengingat, dan
+  ekspor jadwal ke kalender.
+- **Pengingat latihan** — notifikasi browser pada jam yang dipilih. Berjalan selama aplikasi masih
+  terbuka di salah satu tab; di Android notifikasi dikirim lewat service worker (`static/sw.js`).
+- **Sambungan kalender** — jadwal program diekspor sebagai acara berulang (`RRULE` mingguan) dengan
+  alarm 30 menit sebelum mulai. Berkas `.ics` untuk Apple Calendar, plus tautan langsung ke Google
+  Calendar untuk Android. Alarm kalender tetap berbunyi walau aplikasi tertutup.
 
 ## 1. Siapkan Firebase
 
@@ -78,7 +85,8 @@ domains**. Kalau dilewat, login akan ditolak di production.
 ```
 users/{uid}
   name, activeProgram, programStartedAt, goal, activity,
-  sex, age, height, weight, streak, bestStreak, lastDoneDate
+  sex, age, height, weight, streak, bestStreak, lastDoneDate,
+  reminderEnabled, reminderTime, reminderOnRestDays
 
 users/{uid}/logs/{YYYY-MM-DD}
   date, programId, title, focus, minutes, isRest,
