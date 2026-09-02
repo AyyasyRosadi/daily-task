@@ -168,9 +168,10 @@
 <header>
   <h1 class="num text-3xl font-bold">Progres</h1>
   <p class="mt-1 text-sm text-mute">Rekap kehadiran latihan dan perubahan berat badan tahun {year}.</p>
-  <div class="mt-3 flex gap-2">
-    <a class="btn-ghost flex-1" href="/riwayat">Riwayat harian</a>
-    <a class="btn-ghost flex-1" href="/ukuran">Ukuran tubuh</a>
+  <div class="mt-3 grid grid-cols-3 gap-2">
+    <a class="btn-ghost" href="/riwayat">Riwayat</a>
+    <a class="btn-ghost" href="/ukuran">Ukuran</a>
+    <a class="btn-ghost" href="/aktivitas">Kardio</a>
   </div>
 </header>
 

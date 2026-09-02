@@ -9,6 +9,17 @@ export const groupColor = {
   kardio: '#22B8A6'
 };
 
+/**
+ * Nilai yang boleh dipakai program, bawaan maupun buatan sendiri.
+ *
+ * Dipakai penyusun program untuk isi dropdown-nya, dan dipakai tips untuk
+ * menargetkan tingkat atau tempat tertentu. Ditaruh di sini supaya keduanya
+ * tidak pernah berbeda: tingkat 'Lanjutan' tidak ada di program bawaan mana pun,
+ * tapi tetap sah karena penyusun program menawarkannya.
+ */
+export const programLevels = ['Pemula', 'Menengah', 'Lanjutan'];
+export const programPlaces = ['Gym', 'Rumah', 'Gym atau rumah'];
+
 const rest = { title: 'Istirahat', focus: 'Pemulihan', minutes: 0, exercises: [] };
 
 export const programs = [

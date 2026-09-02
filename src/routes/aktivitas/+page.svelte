@@ -100,7 +100,8 @@
 </script>
 
 <header>
-  <h1 class="num text-3xl font-bold">Kardio</h1>
+  <a class="text-xs text-mute underline underline-offset-4" href="/">&larr; Hari ini</a>
+  <h1 class="num mt-2 text-3xl font-bold">Kardio</h1>
   <p class="mt-1 text-sm text-mute">
     Rekam sesi lari atau sepeda dengan GPS. Durasi tetap tercatat walau lokasi tidak tersedia.
   </p>

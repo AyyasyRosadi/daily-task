@@ -27,6 +27,11 @@
   import { waterGlasses } from '$lib/utils/nutrition';
   import { lastPerformance, logVolume, personalRecord, trimNumber } from '$lib/utils/workout';
   import { programProgress, suggestLoad } from '$lib/utils/progression';
+  import { goto } from '$app/navigation';
+  import { activity, elapsed, startActivity } from '$lib/stores/tracker';
+  import { activityTypes, distanceLabel, durationLabel } from '$lib/utils/geo';
+  import { tips } from '$lib/data/tips.js';
+  import { tipOfDay } from '$lib/utils/tips';
 
   const program = $derived($programMap.get($profile?.activeProgram) ?? null);
   const tasks = $derived($todayLog?.tasks ?? []);
@@ -74,6 +79,15 @@
       noteLoaded = true;
     }
   });
+
+  // Kardio dan Tips tidak punya tab sendiri lagi; dua-duanya hal harian, jadi
+  // pintu masuknya ada di halaman ini.
+  const tipHariIni = $derived(tipOfDay(tips, { dateKey: $dayKey, program }));
+
+  async function mulaiKardio(type) {
+    await startActivity(type);
+    await goto('/aktivitas');
+  }
 
   const greeting = () => {
     const h = new Date().getHours();
@@ -261,4 +275,54 @@
       Susun ulang sesi hari ini
     </button>
   </section>
+{/if}
+
+<!--
+  Kardio dan Tips: dua halaman yang dulu punya tab sendiri di bawah. Ditaruh di
+  luar blok program supaya tetap muncul walau belum ada program yang dipilih —
+  lari pagi tidak perlu menunggu program.
+-->
+
+<section class="card mt-4">
+  {#if $activity}
+    <div class="flex items-center gap-3">
+      <span class="text-2xl" aria-hidden="true">{activityTypes[$activity.type].icon}</span>
+      <div class="min-w-0 flex-1">
+        <p class="text-[11px] text-mute">
+          {activityTypes[$activity.type].label}
+          {$activity.status === 'jeda' ? 'sedang dijeda' : 'sedang berjalan'}
+        </p>
+        <p class="num text-2xl font-bold text-plate-yellow">
+          {durationLabel($elapsed)}
+          <span class="text-base text-mute">{distanceLabel($activity.distance)}</span>
+        </p>
+      </div>
+      <a class="chip shrink-0 bg-plate-yellow text-rubber" href="/aktivitas">Buka</a>
+    </div>
+  {:else}
+    <div class="flex items-baseline justify-between gap-3">
+      <h3 class="font-semibold">Kardio</h3>
+      <a class="text-xs text-mute underline underline-offset-4" href="/aktivitas">Riwayat sesi</a>
+    </div>
+    <p class="mt-1 text-xs text-mute">Rekam lari atau sepeda dengan GPS. Hari itu ikut dihitung aktif.</p>
+    <div class="mt-3 flex gap-2">
+      {#each Object.entries(activityTypes) as [id, t] (id)}
+        <button class="btn-ghost flex-1" onclick={() => mulaiKardio(id)}>
+          {t.icon} Mulai {t.label.toLowerCase()}
+        </button>
+      {/each}
+    </div>
+  {/if}
+</section>
+
+{#if tipHariIni}
+  <a class="card mt-4 block" href="/tips">
+    <div class="flex items-baseline justify-between gap-3">
+      <p class="text-[11px] uppercase tracking-wide text-plate-yellow">Tips hari ini</p>
+      <p class="text-[11px] text-mute">{tipHariIni.category}</p>
+    </div>
+    <h3 class="mt-1 font-semibold">{tipHariIni.title}</h3>
+    <p class="mt-1 line-clamp-2 text-sm text-mute">{tipHariIni.body}</p>
+    <p class="mt-2 text-xs text-mute underline underline-offset-4">Lihat semua tips</p>
+  </a>
 {/if}

@@ -29,6 +29,7 @@ pemeriksaan manual sekali jalan.
 Belum ada satu pun halaman yang pernah dilihat dengan mata — semua verifikasi selama ini hanya
 "rute balas 200" dan "modul ter-transform". Perlu login sungguhan lalu periksa:
 
+- Bilah nav bawah: sekarang lima tab, pastikan labelnya muat dan enak ditekan
 - Tabel set di halaman Hari ini (input beban/repetisi, tombol centang per set)
 - Timer istirahat melayang, terutama posisinya di atas bottom nav
 - Kalender di halaman Riwayat
@@ -58,6 +59,12 @@ menghentikannya. Bandingkan satu rute yang sama dengan aplikasi lain.
 
 Aturan Firestore untuk koleksi `activities` juga ikut menunggu A1 — belum pernah dijalankan
 emulator.
+
+### A7. Kisaran harga menu perlu ditengok berkala
+Tier budget di `menus.js` tidak menyimpan harga rupiah per bahan — hanya tingkat biaya kasar
+1-3 per makanan di `foodItems.js`, plus kisaran harian per tier yang ditulis sebagai teks.
+Urutan murah-mahalnya praktis tidak berubah, tapi kisaran rupiahnya akan basi. Tengok sekitar
+sekali setahun, dan ingat angkanya memang gambaran kasar untuk Jakarta.
 
 ---
 
@@ -89,8 +96,9 @@ aplikasi ini.
 
 ### C1. Tes komponen — sebagian selesai
 Kerangkanya sudah ada: `@testing-library/svelte` + jsdom, proyek Vitest kedua bernama
-`komponen` (`tests/components/`), dan empat berkas tes — `TaskRow.svelte`, penyusun program,
-store pelacak kardio, dan halaman Kardio. Total sekarang 227 tes di 13 berkas.
+`komponen` (`tests/components/`), dan delapan berkas tes — `TaskRow.svelte`, penyusun program,
+store pelacak kardio, halaman Kardio, halaman Tips, menu harian di halaman Nutrisi, bilah nav,
+dan pintasan di beranda. Total sekarang 331 tes di 19 berkas.
 
 Yang belum: `RestTimer.svelte` (timer melayang), pencatat makan di halaman Nutrisi, dan
 kalender di halaman Riwayat.
@@ -112,11 +120,20 @@ advisory-nya, jadi belum ada yang bisa dipasang. Perlu ditengok lagi saat kit ri
 Windows. Aktifkan Developer Mode di Windows, atau jalankan build dari WSL. Deploy di Vercel
 tidak terpengaruh.
 
-### C4. Panduan gerakan perlu ditinjau orang yang berkompeten
+### C4. Panduan gerakan dan angka gizi perlu ditinjau orang yang berkompeten
 68 dari 69 entri panduan form di `src/lib/data/exercises.js` ditulis oleh Claude, bukan dikutip
-dari sumber resmi. Sama untuk angka gizi di `src/lib/data/foodItems.js`. Keduanya sudah diberi
-catatan "perkiraan" di UI, tapi kalau aplikasi ini dipakai orang lain, sebaiknya ditinjau
+dari sumber resmi. Sama untuk 81 entri angka gizi di `src/lib/data/foodItems.js`. Keduanya sudah
+diberi catatan "perkiraan" di UI, tapi kalau aplikasi ini dipakai orang lain, sebaiknya ditinjau
 pelatih atau ahli gizi.
+
+Sejak menu harian ditambahkan, taruhannya naik: 54 kombinasi menu di `menus.js` menghitung
+totalnya dari tabel yang sama, jadi satu angka gizi yang salah ikut menggeser semua menu yang
+memakainya. Sisi baiknya, memperbaiki satu angka juga otomatis memperbaiki semuanya — tidak ada
+angka menu yang ditulis tangan.
+
+Isi 65 tips di `src/lib/data/tips.js` juga ditulis Claude. Isinya sengaja dijaga di wilayah
+praktis (teknik, kebiasaan, pola makan umum) dan menghindari klaim medis, tapi tetap belum
+ditinjau siapa pun.
 
 ---
 
@@ -140,6 +157,17 @@ makanan, kelola akun, ekspor data, progresi + minggu deload.
 
 Lainnya: aturan keamanan Firestore, kerangka tes Vitest, lencana + rekor pribadi, tren air
 minum, tema terang/gelap.
+
+Dirapikan 2026-09-02: bilah nav bawah dipangkas dari tujuh tab jadi lima (Hari ini, Program,
+Progres, Nutrisi, Profil). Kardio dan Tips jadi kartu di halaman Hari ini, Kardio juga bisa
+dicapai dari Progres. Halaman tanpa tab sendiri menyalakan tab induknya. Bagian "Akun" yang
+menempel di halaman Tips dihapus — duplikat dari halaman Profil.
+
+Ditambahkan 2026-09-02 (ketiga): 54 kombinasi menu harian dalam tiga tier budget
+(`src/lib/data/menus.js`, angkanya dihitung dari `foodItems.js` — tidak ada angka yang ditulis
+tangan), 81 entri makanan dengan tingkat biaya, dan 65 tips yang urutannya diacak ulang tiap hari
+serta menaikkan tips yang nyambung dengan program yang sedang dijalani (`src/lib/utils/tips.js`).
+`mealPlans` di `foods.js` dihapus karena isinya set angka kedua untuk makanan yang sama.
 
 Ditambahkan 2026-09-02 (kedua): pelacak kardio dengan GPS — start/jeda/stop untuk lari dan
 sepeda, jarak/pace/kecepatan langsung, rute sebagai SVG buatan sendiri tanpa dependensi peta,

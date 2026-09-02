@@ -1,13 +1,25 @@
 <script>
-  import { goals, mealPlans, proteinSources } from '$lib/data/foods.js';
+  import { goals, proteinSources } from '$lib/data/foods.js';
   import { foodCategories, mealSlots, searchFoods } from '$lib/data/foodItems.js';
   import { addMeal, profile, removeMeal, saveProfile, todayMeals, todayNutrition } from '$lib/stores/data';
   import { activityLevels, macroTargets } from '$lib/utils/nutrition';
+  import { budgetTiers, menuGoals } from '$lib/data/menus.js';
+  import { menusFor, sortByCloseness } from '$lib/utils/menus';
 
   const goal = $derived($profile?.goal ?? 'maintain');
   const ready = $derived(Boolean($profile?.weight && $profile?.height && $profile?.age));
   const targets = $derived(ready ? macroTargets($profile) : null);
-  const plan = $derived(mealPlans[goal] ?? mealPlans.maintain);
+  // --- Kombinasi menu harian ---
+
+  let tier = $state('normal');
+  // Awalnya hanya menu yang sesuai tujuan; bisa dilepas untuk melihat semuanya.
+  let ikutTujuan = $state(true);
+  let terbuka = $state(null);
+
+  const menus = $derived(
+    sortByCloseness(menusFor(tier, ikutTujuan ? goal : null), targets?.calories)
+  );
+  const tierAktif = $derived(budgetTiers.find((t) => t.id === tier));
 
   let form = $state({ sex: 'laki-laki', age: '', height: '', weight: '', activity: 'moderate' });
   let formLoaded = false;
@@ -302,29 +314,111 @@
 {/if}
 
 <section class="mt-5">
-  <h2 class="num text-2xl font-bold">Menu harian</h2>
-  <p class="text-xs text-mute">Dua pilihan tiap waktu makan. Angka kalori adalah perkiraan per porsi.</p>
+  <div class="flex items-baseline justify-between gap-3">
+    <h2 class="num text-2xl font-bold">Menu harian</h2>
+    <span class="text-xs text-mute">{menus.length} pilihan</span>
+  </div>
+  <p class="text-xs text-mute">
+    Kombinasi satu hari penuh. Angkanya dihitung dari tabel makanan di bawah, jadi tetap perkiraan.
+  </p>
 
-  <div class="mt-3 space-y-3">
-    {#each plan as meal}
-      <article class="card">
-        <div class="flex items-baseline justify-between">
-          <h3 class="font-semibold">{meal.slot}</h3>
-          <span class="num text-sm text-mute">{meal.time}</span>
-        </div>
-        <ul class="mt-3 space-y-2">
-          {#each meal.items as item}
-            <li class="flex items-start justify-between gap-3 border-t border-hair/5 pt-2 first:border-0 first:pt-0">
-              <span class="text-sm">{item.name}</span>
-              <span class="num shrink-0 text-right text-xs text-mute">
-                {item.kcal} kkal<br />{item.protein} g protein
+  <div class="mt-3 flex gap-1.5">
+    {#each budgetTiers as t (t.id)}
+      <button
+        class="chip flex-1 {tier === t.id ? 'bg-plate-yellow text-rubber' : 'bg-rack text-mute'}"
+        onclick={() => { tier = t.id; terbuka = null; }}
+        aria-pressed={tier === t.id}
+      >
+        {t.label}
+      </button>
+    {/each}
+  </div>
+
+  <p class="mt-2 text-[11px] text-mute">
+    <span class="num text-chalk">{tierAktif.kisaran}</span> &middot; {tierAktif.note}
+  </p>
+
+  <label class="mt-3 flex items-center gap-2 text-xs text-mute">
+    <input type="checkbox" class="h-4 w-4 accent-plate-yellow" bind:checked={ikutTujuan} />
+    Hanya menu untuk tujuan {menuGoals.find((g) => g.id === goal)?.label.toLowerCase()}
+  </label>
+
+  <div class="mt-3 space-y-2">
+    {#each menus as menu (menu.id)}
+      {@const buka = terbuka === menu.id}
+      <article class="overflow-hidden rounded-xl border border-hair/5 bg-deck">
+        <button
+          class="flex w-full items-center gap-3 px-4 py-3 text-left"
+          onclick={() => (terbuka = buka ? null : menu.id)}
+          aria-expanded={buka}
+        >
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-sm font-medium">{menu.name}</span>
+            <span class="num block text-xs text-mute">
+              {menu.total.kcal} kkal &middot; {menu.total.p} g protein
+              {#if !ikutTujuan}
+                &middot; {menuGoals.find((g) => g.id === menu.goal)?.label.toLowerCase()}
+              {/if}
+            </span>
+          </span>
+          {#if targets}
+            {@const selisih = menu.total.kcal - targets.calories}
+            <span
+              class="num chip shrink-0 {Math.abs(selisih) <= 200
+                ? 'bg-plate-green/20 text-plate-green'
+                : 'bg-rack text-mute'}"
+            >
+              {selisih > 0 ? '+' : ''}{selisih}
+            </span>
+          {/if}
+        </button>
+
+        {#if buka}
+          <div class="border-t border-hair/5 px-4 py-3">
+            <p class="text-xs text-mute">{menu.note}</p>
+
+            {#each menu.slots as slot (slot.id)}
+              {#if slot.entries.length}
+                <div class="mt-3">
+                  <div class="flex items-baseline justify-between">
+                    <h3 class="text-[11px] uppercase tracking-wide text-mute">{slot.label}</h3>
+                    <span class="num text-[11px] text-mute">{slot.total.kcal} kkal</span>
+                  </div>
+                  <ul class="mt-1 space-y-1">
+                    {#each slot.entries as e (e.name)}
+                      <li class="flex items-start justify-between gap-3 text-sm">
+                        <span class="min-w-0">
+                          {e.name}
+                          <span class="text-xs text-mute">
+                            {e.qty === 1 ? e.porsi : `${e.qty} x ${e.porsi}`}
+                          </span>
+                        </span>
+                        <span class="num shrink-0 text-xs text-mute">{Math.round(e.kcal)}</span>
+                      </li>
+                    {/each}
+                  </ul>
+                </div>
+              {/if}
+            {/each}
+
+            <div class="num mt-3 flex justify-between border-t border-hair/5 pt-2 text-sm">
+              <span class="text-mute">Total sehari</span>
+              <span>
+                {menu.total.kcal} kkal &middot; {menu.total.p} g P &middot;
+                {menu.total.k} g K &middot; {menu.total.l} g L
               </span>
-            </li>
-          {/each}
-        </ul>
+            </div>
+          </div>
+        {/if}
       </article>
     {/each}
   </div>
+
+  <p class="mt-3 text-[11px] text-mute">
+    Kisaran harga tiap tier adalah gambaran kasar, bukan hasil hitungan: harga bahan berbeda tiap
+    kota dan berubah tiap tahun. Yang benar-benar dijaga adalah bahannya — menu hemat tidak pernah
+    memakai bahan mahal.
+  </p>
 </section>
 
 <section class="card mt-5">

@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { byGroup, exercises, groups } from '$lib/data/exercises.js';
-  import { groupColor } from '$lib/data/programs.js';
+  import { groupColor, programLevels, programPlaces } from '$lib/data/programs.js';
   import {
     blankProgram,
     programMap,
@@ -157,9 +157,9 @@
       <label class="text-xs text-mute">
         Tingkat
         <select class="field mt-1 text-sm" bind:value={draft.level}>
-          <option value="Pemula">Pemula</option>
-          <option value="Menengah">Menengah</option>
-          <option value="Lanjutan">Lanjutan</option>
+          {#each programLevels as level}
+            <option value={level}>{level}</option>
+          {/each}
         </select>
       </label>
       <label class="text-xs text-mute">
@@ -170,9 +170,9 @@
     <label class="mt-3 block text-xs text-mute">
       Tempat
       <select class="field mt-1 text-sm" bind:value={draft.place}>
-        <option value="Gym">Gym</option>
-        <option value="Rumah">Rumah</option>
-        <option value="Gym atau rumah">Gym atau rumah</option>
+        {#each programPlaces as place}
+          <option value={place}>{place}</option>
+        {/each}
       </select>
     </label>
     <label class="mt-3 block text-xs text-mute">
