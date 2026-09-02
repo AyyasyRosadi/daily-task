@@ -11,6 +11,7 @@
   import { initTheme, setTheme } from '$lib/stores/theme';
   import Nav from '$lib/components/Nav.svelte';
   import RestTimer from '$lib/components/RestTimer.svelte';
+  import ActivityBar from '$lib/components/ActivityBar.svelte';
   import SetupNotice from '$lib/components/SetupNotice.svelte';
 
   let { children } = $props();
@@ -64,6 +65,6 @@
     <main class="mx-auto w-full max-w-lg px-4 pb-28 pt-7">
       {@render children()}
     </main>
-    {#if $user}<RestTimer /><Nav />{/if}
+    {#if $user}<ActivityBar /><RestTimer /><Nav />{/if}
   </div>
 {/if}

@@ -16,12 +16,14 @@ import { dateKey, keyToDate, shiftKey } from '$lib/utils/date';
 import { tasksFromSession } from '$lib/data/programs';
 import { sessionFor, startProgramSync, stopProgramSync } from '$lib/stores/programs';
 import { emptySet, setsOf } from '$lib/utils/workout';
+import { compactPoints } from '$lib/utils/geo';
 
 export const profile = writable(null);
 export const yearLogs = writable([]);
 export const weights = writable([]);
 export const measurements = writable([]);
 export const yearMeals = writable([]);
+export const activities = writable([]);
 export const syncing = writable(true);
 export const dayKey = writable(dateKey());
 
@@ -95,6 +97,7 @@ export function stopSync() {
   weights.set([]);
   measurements.set([]);
   yearMeals.set([]);
+  activities.set([]);
   archiveLogs.set([]);
   loadedYears.clear();
   stopProgramSync();
@@ -170,6 +173,21 @@ export function startSync(nextUid) {
   unsubs.push(
     onSnapshot(mealsQuery, (snap) => {
       yearMeals.set(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    })
+  );
+
+  const activitiesQuery = query(
+    collection(db, 'users', uid, 'activities'),
+    where('date', '>=', `${year}-01-01`),
+    where('date', '<=', `${year}-12-31`)
+  );
+  unsubs.push(
+    onSnapshot(activitiesQuery, (snap) => {
+      activities.set(
+        snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .sort((a, b) => b.id.localeCompare(a.id))
+      );
     })
   );
 
@@ -420,11 +438,50 @@ export async function logMeasurement(values) {
 /** Hapus seluruh data pengguna di Firestore. Dipakai sebelum menghapus akun. */
 export async function deleteAllUserData() {
   if (!uid || !db) return;
-  for (const sub of ['logs', 'weights', 'measurements', 'meals', 'programs']) {
+  for (const sub of ['logs', 'weights', 'measurements', 'meals', 'programs', 'activities']) {
     const snap = await getDocs(collection(db, 'users', uid, sub));
     await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
   }
   await deleteDoc(doc(db, 'users', uid));
+}
+
+/**
+ * Simpan sesi lari/sepeda.
+ *
+ * Id dokumen dibentuk dari tanggal dan jam mulai supaya urut sendiri dan dua
+ * sesi di hari yang sama tidak saling menimpa. Rute mentah disederhanakan dulu:
+ * satu jam perekaman bisa ribuan titik, sementara satu dokumen Firestore
+ * dibatasi 1 MiB. Jaraknya sendiri sudah dihitung dari titik mentah, jadi
+ * penyederhanaan tidak mengubah angka yang dilihat pengguna.
+ */
+export async function saveActivity({ type, startedAt, seconds, meters, raw, note = '' }) {
+  if (!uid || !db) return null;
+  const start = new Date(startedAt ?? Date.now());
+  const key = dateKey(start);
+  const jam = [start.getHours(), start.getMinutes(), start.getSeconds()]
+    .map((n) => String(n).padStart(2, '0'))
+    .join('');
+
+  const payload = {
+    date: key,
+    type: type === 'sepeda' ? 'sepeda' : 'lari',
+    startedAt: start.getTime(),
+    seconds: Math.max(0, Math.round(Number(seconds) || 0)),
+    meters: Math.max(0, Math.round(Number(meters) || 0)),
+    route: compactPoints(raw ?? []),
+    note: String(note ?? '').slice(0, 300)
+  };
+
+  await setDoc(doc(db, 'users', uid, 'activities', `${key}-${jam}`), payload);
+  // Lari pagi tetap menghitung hari itu sebagai hari aktif, walau tidak ada
+  // sesi latihan beban yang terjadwal.
+  await markStreak(key);
+  return { id: `${key}-${jam}`, ...payload };
+}
+
+export async function deleteActivity(id) {
+  if (!uid || !db || !id) return;
+  await deleteDoc(doc(db, 'users', uid, 'activities', id));
 }
 
 export async function logWeight(kg) {

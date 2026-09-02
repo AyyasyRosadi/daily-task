@@ -95,6 +95,39 @@ service cloud.firestore {
                               && request.resource.data.items.size() <= 60;
       }
 
+      // --- Sesi lari/sepeda ---
+      //
+      // Kunci dokumen: YYYY-MM-DD-HHmmss, jadi satu hari boleh punya beberapa
+      // sesi tanpa saling menimpa, tapi tetap tidak bisa dibanjiri kunci acak.
+      match /activities/{activityId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+                              && activityId.matches('^\d{4}-\d{2}-\d{2}-\d{6}$')
+                              && isDateKey(request.resource.data.date)
+                              && activityId.split('-').size() == 4
+                              && activityId.split('-')[0] + '-'
+                                 + activityId.split('-')[1] + '-'
+                                 + activityId.split('-')[2] == request.resource.data.date
+                              && request.resource.data.type in ['lari', 'sepeda']
+                              && request.resource.data.startedAt is number
+                              && request.resource.data.seconds is number
+                              && request.resource.data.seconds >= 0
+                              && request.resource.data.seconds <= 86400
+                              && request.resource.data.meters is number
+                              && request.resource.data.meters >= 0
+                              && request.resource.data.meters <= 1000000
+                              && request.resource.data.route is list
+                              // Batas titik rute menjaga dokumen tetap jauh di
+                              // bawah 1 MiB, sekaligus mencegah satu dokumen
+                              // raksasa memperlambat langganan realtime.
+                              && request.resource.data.route.size() <= 3000
+                              && request.resource.data.note is string
+                              && request.resource.data.note.size() <= 300
+                              && request.resource.data.keys().hasOnly([
+                                   'date', 'type', 'startedAt', 'seconds', 'meters', 'route', 'note'
+                                 ]);
+      }
+
       // --- Program buatan sendiri ---
       match /programs/{programId} {
         allow read, delete: if isOwner(uid);

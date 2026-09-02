@@ -4,7 +4,9 @@
   import { dayShort, keyToDate, monthShort, weekKeys } from '$lib/utils/date';
   import { exerciseHistory, exerciseNames, personalRecord, trimNumber } from '$lib/utils/workout';
   import { achievements, nextTarget, recordBoard } from '$lib/utils/achievements';
+  import { levelFor, levelNote, liftOf } from '$lib/data/strengthStandards';
   import { waterGlasses } from '$lib/utils/nutrition';
+  import { drawSummaryCard, shareCard, summarize, volumeLabel } from '$lib/utils/share';
 
   const year = new Date().getFullYear();
 
@@ -93,6 +95,12 @@
   const liftHistory = $derived(liftName ? exerciseHistory($yearLogs, liftName) : []);
   const liftRecord = $derived(liftName ? personalRecord($yearLogs, liftName) : null);
 
+  // Pembanding standar kekuatan. Dasarnya 1RM perkiraan dari set terberat yang
+  // pernah tercatat, karena tabel ExRx adalah tabel 1RM — bukan beban set biasa.
+  const liftStandard = $derived(
+    levelFor(liftName, $profile?.sex, $profile?.weight, liftRecord?.est1RM)
+  );
+
   const liftChart = $derived.by(() => {
     const points = liftHistory.slice(-20);
     if (points.length < 2) return null;
@@ -116,6 +124,33 @@
       gain: points[points.length - 1].topKg - points[0].topKg
     };
   });
+
+  // --- Kartu ringkasan untuk dibagikan ---
+
+  let sharePeriod = $state('minggu');
+  let shareStatus = $state('');
+  let shareCanvas = $state(null);
+
+  const shareSummary = $derived(
+    summarize($yearLogs, $profile, { period: sharePeriod, today: keyToDate($dayKey) })
+  );
+
+  // Pratinjau digambar ulang tiap kali periode atau datanya berubah; canvas-nya
+  // sengaja dipakai ulang supaya tidak ada alokasi 1080x1080 berkali-kali.
+  $effect(() => {
+    if (shareCanvas) drawSummaryCard(shareCanvas, shareSummary);
+  });
+
+  async function bagikan() {
+    shareStatus = '';
+    try {
+      const cara = await shareCard(shareCanvas, shareSummary);
+      if (cara === 'unduh') shareStatus = 'Kartu tersimpan sebagai gambar di perangkat ini.';
+      if (cara === 'bagikan') shareStatus = 'Kartu dibagikan.';
+    } catch {
+      shareStatus = 'Kartu gagal dibuat. Coba lagi.';
+    }
+  }
 
   let kg = $state('');
   let saved = $state(false);
@@ -265,6 +300,38 @@
 {/if}
 
 <section class="card mt-4">
+  <div class="flex items-baseline justify-between gap-3">
+    <h2 class="font-semibold">Bagikan ringkasan</h2>
+    <div class="flex gap-1.5">
+      {#each ['minggu', 'bulan'] as p (p)}
+        <button
+          class="chip {sharePeriod === p ? 'bg-plate-yellow text-rubber' : 'bg-rack text-mute'}"
+          onclick={() => (sharePeriod = p)}
+          aria-pressed={sharePeriod === p}
+        >
+          {p === 'minggu' ? 'Minggu ini' : 'Bulan ini'}
+        </button>
+      {/each}
+    </div>
+  </div>
+
+  <p class="mt-2 text-xs text-mute">{shareSummary.label}</p>
+
+  <canvas
+    bind:this={shareCanvas}
+    class="mt-3 w-full rounded-xl border border-hair/5"
+    role="img"
+    aria-label={`Kartu ringkasan ${shareSummary.label}: ${shareSummary.sessions} sesi, ${volumeLabel(shareSummary.volume).value} ${volumeLabel(shareSummary.volume).unit}, ${shareSummary.streak} hari beruntun`}
+  ></canvas>
+
+  <button class="btn-primary mt-3 w-full" onclick={bagikan}>Bagikan kartu</button>
+
+  {#if shareStatus}
+    <p class="mt-2 text-xs text-mute">{shareStatus}</p>
+  {/if}
+</section>
+
+<section class="card mt-4">
   <h2 class="font-semibold">Beban per gerakan</h2>
 
   {#if !liftNames.length}
@@ -297,6 +364,56 @@
         <p class="text-mute">sesi</p>
       </div>
     </div>
+
+    {#if liftStandard}
+      <div class="mt-4 rounded-xl bg-rack p-3">
+        <div class="flex items-baseline justify-between gap-3">
+          <p class="text-sm font-semibold">
+            {liftStandard.level ? liftStandard.level.label : 'Di bawah standar terbawah'}
+          </p>
+          {#if liftStandard.next}
+            <p class="num text-xs text-mute">
+              {trimNumber(liftStandard.toNext)} kg lagi ke {liftStandard.next.label.toLowerCase()}
+            </p>
+          {/if}
+        </div>
+
+        <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-deck">
+          <div class="h-full rounded-full bg-plate-yellow" style="width: {liftStandard.percent}%"></div>
+        </div>
+
+        <div class="num mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-mute">
+          {#each liftStandard.thresholds as t (t.id)}
+            <span class={liftStandard.level?.id === t.id ? 'text-plate-yellow' : ''}>
+              {t.label} {trimNumber(t.kg)}
+            </span>
+          {/each}
+        </div>
+
+        {#if liftStandard.level}
+          <p class="mt-2 text-[11px] text-mute">{levelNote[liftStandard.level.id]}</p>
+        {/if}
+
+        <p class="mt-2 text-[11px] text-mute">
+          Ambang dari tabel 1RM
+          <a
+            class="underline underline-offset-2"
+            href="https://exrx.net/Testing/WeightLifting/StrengthStandards"
+            target="_blank"
+            rel="noreferrer"
+          >
+            ExRx.net
+          </a>
+          untuk usia 18-39, sesuai kelas berat badan {$profile.weight} kg. Bukan norma populasi —
+          hanya pembanding kasar.
+        </p>
+      </div>
+    {:else if liftOf[liftName] && !$profile?.weight}
+      <p class="mt-4 rounded-xl bg-rack p-3 text-[11px] text-mute">
+        Isi berat badan di halaman Profil untuk melihat level kekuatan gerakan ini dibanding
+        standar.
+      </p>
+    {/if}
 
     {#if liftChart}
       <svg viewBox="0 0 300 80" class="mt-4 w-full" role="img" aria-label={`Grafik beban ${liftName}`}>
