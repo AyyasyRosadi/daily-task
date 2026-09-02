@@ -2,6 +2,7 @@ import { derived, get, writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import {
   collection,
+  deleteDoc,
   doc,
   getDocs,
   onSnapshot,
@@ -12,14 +13,30 @@ import {
 } from 'firebase/firestore';
 import { db } from '$lib/firebase';
 import { dateKey, keyToDate, shiftKey } from '$lib/utils/date';
-import { sessionForDate, tasksFromSession } from '$lib/data/programs';
+import { tasksFromSession } from '$lib/data/programs';
+import { sessionFor, startProgramSync, stopProgramSync } from '$lib/stores/programs';
 import { emptySet, setsOf } from '$lib/utils/workout';
 
 export const profile = writable(null);
 export const yearLogs = writable([]);
 export const weights = writable([]);
+export const measurements = writable([]);
+export const yearMeals = writable([]);
 export const syncing = writable(true);
 export const dayKey = writable(dateKey());
+
+/**
+ * Ukuran tubuh yang dilacak selain berat badan. Timbangan sering diam saat
+ * komposisi tubuh sebenarnya berubah, jadi angka-angka ini lebih jujur.
+ */
+export const measurementFields = [
+  { id: 'pinggang', label: 'Pinggang', hint: 'Setinggi pusar, jangan ditahan napas' },
+  { id: 'dada', label: 'Dada', hint: 'Bagian terlebar, lengan rileks' },
+  { id: 'lengan', label: 'Lengan', hint: 'Bisep terbesar, lengan ditekuk' },
+  { id: 'paha', label: 'Paha', hint: 'Bagian terlebar, tepat di bawah bokong' },
+  { id: 'pinggul', label: 'Pinggul', hint: 'Bagian bokong terlebar' },
+  { id: 'bahu', label: 'Bahu', hint: 'Melingkar di titik bahu terlebar' }
+];
 
 /** Log tahun-tahun sebelumnya, dimuat sekali jalan saat halaman Riwayat memintanya. */
 export const archiveLogs = writable([]);
@@ -64,7 +81,8 @@ function defaultProfile() {
     reminderEnabled: false,
     reminderTime: '18:00',
     reminderOnRestDays: false,
-    restSeconds: 90
+    restSeconds: 90,
+    theme: 'gelap'
   };
 }
 
@@ -75,8 +93,11 @@ export function stopSync() {
   profile.set(null);
   yearLogs.set([]);
   weights.set([]);
+  measurements.set([]);
+  yearMeals.set([]);
   archiveLogs.set([]);
   loadedYears.clear();
+  stopProgramSync();
   syncing.set(true);
 }
 
@@ -109,6 +130,7 @@ export function startSync(nextUid) {
   stopSync();
   uid = nextUid;
   syncing.set(true);
+  startProgramSync(uid);
 
   const userRef = doc(db, 'users', uid);
   unsubs.push(
@@ -139,6 +161,25 @@ export function startSync(nextUid) {
       weights.set(snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.date.localeCompare(b.date)));
     })
   );
+
+  const mealsQuery = query(
+    collection(db, 'users', uid, 'meals'),
+    where('date', '>=', `${year}-01-01`),
+    where('date', '<=', `${year}-12-31`)
+  );
+  unsubs.push(
+    onSnapshot(mealsQuery, (snap) => {
+      yearMeals.set(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    })
+  );
+
+  unsubs.push(
+    onSnapshot(collection(db, 'users', uid, 'measurements'), (snap) => {
+      measurements.set(
+        snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.date.localeCompare(b.date))
+      );
+    })
+  );
 }
 
 /** Dipanggil saat tab kembali aktif supaya tanggal tidak basi setelah lewat tengah malam. */
@@ -157,7 +198,7 @@ export async function saveProfile(patch) {
 }
 
 function buildLog(key, programId, previous) {
-  const session = sessionForDate(programId, keyToDate(key));
+  const session = sessionFor(programId, keyToDate(key));
   return {
     date: key,
     programId,
@@ -256,6 +297,28 @@ export async function addSet(taskId) {
   await commitTasks(log, tasks);
 }
 
+/**
+ * Ganti sebuah gerakan dengan gerakan lain di kelompok otot yang sama.
+ * Target set dan repetisi dipertahankan; catatan set direset karena bebannya
+ * tidak lagi sebanding.
+ */
+export async function swapExercise(taskId, newName, newGroup) {
+  const log = get(todayLog);
+  if (!log || !newName) return;
+  const tasks = log.tasks.map((t) => {
+    if (t.id !== taskId) return t;
+    return {
+      ...t,
+      name: newName,
+      group: newGroup ?? t.group,
+      done: false,
+      logs: setsOf(t).map(() => emptySet()),
+      swappedFrom: t.swappedFrom ?? t.name
+    };
+  });
+  await commitTasks(log, tasks);
+}
+
 /** Buang set terakhir. Target set bawaan program tidak bisa dikurangi di bawah satu. */
 export async function removeSet(taskId) {
   const log = get(todayLog);
@@ -287,6 +350,81 @@ export async function saveNote(note) {
   const log = get(todayLog);
   if (!log) return;
   await updateDoc(logRef(log.id), { note });
+}
+
+/** Catatan makan hari ini. */
+export const todayMeals = derived([yearMeals, dayKey], ([$meals, $key]) => {
+  return $meals.find((m) => m.id === $key)?.items ?? [];
+});
+
+/** Total kalori dan makro yang sudah masuk hari ini. */
+export const todayNutrition = derived(todayMeals, ($items) =>
+  $items.reduce(
+    (sum, it) => ({
+      calories: sum.calories + (Number(it.kcal) || 0),
+      protein: sum.protein + (Number(it.p) || 0),
+      carbs: sum.carbs + (Number(it.k) || 0),
+      fat: sum.fat + (Number(it.l) || 0)
+    }),
+    { calories: 0, protein: 0, carbs: 0, fat: 0 }
+  )
+);
+
+function mealRef(key) {
+  return doc(db, 'users', uid, 'meals', key);
+}
+
+/** Tambah satu makanan ke catatan hari ini, dikali jumlah porsi. */
+export async function addMeal(food, slot, servings = 1) {
+  if (!uid || !food) return;
+  const key = get(dayKey);
+  const n = Number(servings) || 1;
+  const item = {
+    name: food.name,
+    porsi: food.porsi,
+    slot,
+    servings: n,
+    kcal: Math.round(food.kcal * n),
+    p: Math.round(food.p * n * 10) / 10,
+    k: Math.round(food.k * n * 10) / 10,
+    l: Math.round(food.l * n * 10) / 10,
+    at: Date.now()
+  };
+  await setDoc(mealRef(key), { date: key, items: [...get(todayMeals), item] }, { merge: true });
+}
+
+/** Hapus satu catatan makan berdasarkan posisinya. */
+export async function removeMeal(index) {
+  if (!uid) return;
+  const key = get(dayKey);
+  const items = get(todayMeals).filter((_, i) => i !== index);
+  await setDoc(mealRef(key), { date: key, items }, { merge: true });
+}
+
+/**
+ * Simpan ukuran tubuh untuk hari ini. Hanya field yang diisi yang ditulis,
+ * supaya pengukuran sebagian tidak menghapus angka sebelumnya.
+ */
+export async function logMeasurement(values) {
+  if (!uid) return;
+  const key = get(dayKey);
+  const payload = { date: key };
+  for (const [field, value] of Object.entries(values)) {
+    const num = Number(value);
+    if (Number.isFinite(num) && num > 0) payload[field] = num;
+  }
+  if (Object.keys(payload).length === 1) return;
+  await setDoc(doc(db, 'users', uid, 'measurements', key), payload, { merge: true });
+}
+
+/** Hapus seluruh data pengguna di Firestore. Dipakai sebelum menghapus akun. */
+export async function deleteAllUserData() {
+  if (!uid || !db) return;
+  for (const sub of ['logs', 'weights', 'measurements', 'meals', 'programs']) {
+    const snap = await getDocs(collection(db, 'users', uid, sub));
+    await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+  }
+  await deleteDoc(doc(db, 'users', uid));
 }
 
 export async function logWeight(kg) {

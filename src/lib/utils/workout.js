@@ -120,6 +120,9 @@ export function personalRecord(logs, name) {
 
 /** Angka dirapikan: buang nol di belakang koma supaya 60.0 tampil sebagai 60. */
 export function trimNumber(value, digits = 1) {
+  // Number(null) dan Number('') sama-sama 0, jadi keduanya harus ditolak lebih
+  // dulu — kalau tidak, nilai kosong tampil sebagai "0" di layar.
+  if (value === null || value === undefined || value === '') return '';
   const n = Number(value);
   if (!Number.isFinite(n)) return '';
   return String(Number(n.toFixed(digits)));

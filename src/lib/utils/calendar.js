@@ -1,4 +1,4 @@
-import { getProgram } from '$lib/data/programs';
+import { resolveProgram as getProgram } from '$lib/stores/programs';
 
 /** Nomor hari JavaScript (0 = Minggu) ke kode hari iCalendar. */
 const icsDay = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];

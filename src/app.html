@@ -12,6 +12,27 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Gym Daily" />
     <meta name="mobile-web-app-capable" content="yes" />
+
+    <script>
+      // Terapkan tema sebelum halaman dilukis, kalau tidak akan ada kedipan
+      // gelap-ke-terang tiap kali aplikasi dibuka.
+      (function () {
+        try {
+          var saved = localStorage.getItem('gym-daily:theme') || 'gelap';
+          var light =
+            saved === 'terang' ||
+            (saved === 'sistem' && window.matchMedia('(prefers-color-scheme: light)').matches);
+          var root = document.documentElement;
+          root.classList.toggle('light', light);
+          root.classList.toggle('dark', !light);
+          if (light) {
+            document.querySelector('meta[name="theme-color"]').content = '#FAF9F6';
+          }
+        } catch (e) {
+          /* biarkan tema gelap bawaan */
+        }
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

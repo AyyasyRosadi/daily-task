@@ -1,0 +1,116 @@
+rules_version = '2';
+
+// Aturan keamanan Gym Daily.
+//
+// Prinsipnya satu: seluruh data hidup di bawah users/{uid}, dan hanya pemilik uid
+// itu yang boleh menyentuhnya. Tidak ada koleksi publik dan tidak ada data yang
+// dibagi antar pengguna, jadi tidak ada jalur baca lintas akun sama sekali.
+//
+// Pasang dengan:  firebase deploy --only firestore:rules
+// Uji lokal:      firebase emulators:start --only firestore
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // Kunci dokumen harian selalu YYYY-MM-DD. Ini mencegah satu akun membanjiri
+    // koleksinya sendiri dengan dokumen sampah berkunci acak.
+    function isDateKey(key) {
+      return key.matches('^\\d{4}-\\d{2}-\\d{2}$');
+    }
+
+    function isNumberOrNull(value) {
+      return value == null || value is number;
+    }
+
+    // --- Profil pengguna ---
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+
+      allow create: if isOwner(uid)
+                    && request.resource.data.keys().hasOnly([
+                         'createdAt', 'name', 'activeProgram', 'programStartedAt', 'goal',
+                         'activity', 'sex', 'age', 'height', 'weight', 'streak', 'bestStreak',
+                         'lastDoneDate', 'reminderEnabled', 'reminderTime', 'reminderOnRestDays',
+                         'restSeconds', 'theme'
+                       ]);
+
+      // Update sengaja tidak dibatasi daftar fieldnya supaya menambah preferensi
+      // baru di aplikasi tidak perlu menunggu deploy aturan. Batasannya tetap:
+      // hanya pemilik, dan angka-angka tubuh harus benar-benar angka.
+      allow update: if isOwner(uid)
+                    && isNumberOrNull(request.resource.data.get('age', null))
+                    && isNumberOrNull(request.resource.data.get('height', null))
+                    && isNumberOrNull(request.resource.data.get('weight', null))
+                    && isNumberOrNull(request.resource.data.get('restSeconds', null));
+
+      allow delete: if isOwner(uid);
+
+      // --- Catatan latihan harian ---
+      match /logs/{dayKey} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+                              && isDateKey(dayKey)
+                              && request.resource.data.date == dayKey
+                              && request.resource.data.tasks is list
+                              && request.resource.data.tasks.size() <= 40;
+      }
+
+      // --- Berat badan ---
+      match /weights/{dayKey} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+                              && isDateKey(dayKey)
+                              && request.resource.data.date == dayKey
+                              && request.resource.data.kg is number
+                              && request.resource.data.kg > 0
+                              && request.resource.data.kg < 500;
+      }
+
+      // --- Ukuran tubuh ---
+      match /measurements/{dayKey} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+                              && isDateKey(dayKey)
+                              && request.resource.data.date == dayKey
+                              && request.resource.data.keys().hasOnly([
+                                   'date', 'pinggang', 'dada', 'lengan', 'paha', 'pinggul', 'bahu'
+                                 ]);
+      }
+
+      // --- Catatan makan ---
+      match /meals/{dayKey} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+                              && isDateKey(dayKey)
+                              && request.resource.data.date == dayKey
+                              && request.resource.data.items is list
+                              && request.resource.data.items.size() <= 60;
+      }
+
+      // --- Program buatan sendiri ---
+      match /programs/{programId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+                              && request.resource.data.name is string
+                              && request.resource.data.name.size() > 0
+                              && request.resource.data.name.size() <= 80
+                              && request.resource.data.schedule is map
+                              && request.resource.data.schedule.keys().size() <= 7;
+      }
+    }
+
+    // Apa pun di luar pohon di atas ditolak. Tanpa baris ini, koleksi baru yang
+    // belum sempat diberi aturan akan mewarisi mode terbuka saat pengembangan.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

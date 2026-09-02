@@ -36,7 +36,7 @@
       height={plate.height}
       rx="3"
       fill={plate.task.done ? plate.color : 'transparent'}
-      stroke={plate.task.done ? 'none' : 'rgba(241,238,231,0.18)'}
+      stroke={plate.task.done ? 'none' : 'var(--overlay-strong)'}
       stroke-width="1.5"
       class="transition-all duration-300"
     />

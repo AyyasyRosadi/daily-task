@@ -14,7 +14,7 @@
 </script>
 
 <nav
-  class="fixed inset-x-0 bottom-0 z-20 border-t border-white/5 bg-rubber/95 backdrop-blur"
+  class="fixed inset-x-0 bottom-0 z-20 border-t border-hair/5 bg-rubber/95 backdrop-blur"
   style="padding-bottom: env(safe-area-inset-bottom)"
 >
   <ul class="mx-auto flex max-w-lg">

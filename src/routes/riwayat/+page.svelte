@@ -65,7 +65,7 @@
   );
 
   function cellStyle(cell) {
-    if (!cell.log) return cell.future ? 'rgba(241,238,231,0.03)' : 'rgba(241,238,231,0.07)';
+    if (!cell.log) return cell.future ? 'var(--overlay-weak)' : 'var(--overlay)';
     if (cell.log.completed) return cell.log.isRest ? 'rgba(49,160,95,0.35)' : '#31A05F';
     return 'rgba(49,160,95,0.15)';
   }
@@ -116,8 +116,8 @@
           selected
             ? 'border-plate-yellow'
             : cell.key === $dayKey
-              ? 'border-white/30'
-              : 'border-white/5'}"
+              ? 'border-hair/30'
+              : 'border-hair/5'}"
           style="background: {cellStyle(cell)}"
         >
           {cell.day}
@@ -174,11 +174,11 @@
         <ul class="mt-4 space-y-3">
           {#each detail.tasks ?? [] as task (task.id)}
             {@const sets = setsOf(task).filter((s) => s.done)}
-            <li class="border-t border-white/5 pt-3 first:border-0 first:pt-0">
+            <li class="border-t border-hair/5 pt-3 first:border-0 first:pt-0">
               <div class="flex items-center gap-2">
                 <span
                   class="h-4 w-1 shrink-0 rounded-full"
-                  style="background: {task.done ? (groupColor[task.group] ?? '#E7E3DA') : 'rgba(241,238,231,0.15)'}"
+                  style="background: {task.done ? (groupColor[task.group] ?? '#E7E3DA') : 'var(--overlay-strong)'}"
                 ></span>
                 <span class="min-w-0 flex-1 truncate text-sm {task.done ? '' : 'text-mute'}">
                   {task.name}
@@ -197,13 +197,13 @@
         </ul>
 
         {#if detailVolume > 0}
-          <p class="mt-4 border-t border-white/5 pt-3 text-xs text-mute">
+          <p class="mt-4 border-t border-hair/5 pt-3 text-xs text-mute">
             Volume sesi <span class="num text-chalk">{trimNumber(detailVolume, 0)}</span> kg
           </p>
         {/if}
       {/if}
 
-      <dl class="mt-4 space-y-1 border-t border-white/5 pt-3 text-xs">
+      <dl class="mt-4 space-y-1 border-t border-hair/5 pt-3 text-xs">
         <div class="flex justify-between">
           <dt class="text-mute">Air minum</dt>
           <dd class="num">{detail.water ?? 0} gelas</dd>

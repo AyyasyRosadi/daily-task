@@ -1,14 +1,26 @@
+/**
+ * Warna netral ditulis sebagai channel RGB di dalam CSS variable supaya tema
+ * terang dan gelap bisa ditukar tanpa mengubah satu pun kelas di komponen.
+ * Sintaks `<alpha-value>` menjaga modifier opacity Tailwind tetap berfungsi,
+ * misalnya `bg-deck/50`.
+ *
+ * Warna `plate` sengaja tetap hex: itu warna aksen merek yang sama di kedua tema.
+ */
+const neutral = (name) => `rgb(var(--c-${name}) / <alpha-value>)`;
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./src/**/*.{html,js,svelte}'],
   theme: {
     extend: {
       colors: {
-        rubber: '#0F1412',
-        deck: '#171E1B',
-        rack: '#212A26',
-        chalk: '#F1EEE7',
-        mute: '#8FA098',
+        rubber: neutral('rubber'),
+        deck: neutral('deck'),
+        rack: neutral('rack'),
+        chalk: neutral('chalk'),
+        mute: neutral('mute'),
+        // Garis pemisah: putih tipis di tema gelap, hitam tipis di tema terang.
+        hair: 'rgb(var(--c-hair) / <alpha-value>)',
         plate: {
           red: '#D6353B',
           blue: '#2C6BE0',

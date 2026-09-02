@@ -2,9 +2,35 @@
   import { goto } from '$app/navigation';
   import StatTile from '$lib/components/StatTile.svelte';
   import { goals } from '$lib/data/foods.js';
-  import { getProgram } from '$lib/data/programs';
-  import { logout, user } from '$lib/stores/auth';
-  import { profile, saveProfile, streak, yearLogs } from '$lib/stores/data';
+  import { programMap } from '$lib/stores/programs';
+  import {
+    authError,
+    changeEmail,
+    changePassword,
+    deleteAccount,
+    logout,
+    resetPassword,
+    updateDisplayName,
+    user
+  } from '$lib/stores/auth';
+  import {
+    allLogs,
+    deleteAllUserData,
+    measurementFields,
+    measurements,
+    profile,
+    saveProfile,
+    streak,
+    weights,
+    yearLogs
+  } from '$lib/stores/data';
+  import {
+    downloadText,
+    logsToCsv,
+    measurementsToCsv,
+    toJsonBackup,
+    weightsToCsv
+  } from '$lib/utils/export';
   import {
     notificationsSupported,
     permission,
@@ -13,9 +39,10 @@
   } from '$lib/stores/notifications';
   import { buildIcs, googleCalendarUrl, icsFileName, trainingDays } from '$lib/utils/calendar';
   import { activityLevels } from '$lib/utils/nutrition';
+  import { setTheme, theme, themes } from '$lib/stores/theme';
   import { dayLong } from '$lib/utils/date';
 
-  const program = $derived(getProgram($profile?.activeProgram));
+  const program = $derived($programMap.get($profile?.activeProgram) ?? null);
   const trainingCount = $derived($yearLogs.filter((l) => l.completed && !l.isRest).length);
   const days = $derived(trainingDays($profile?.activeProgram));
   const dayNames = $derived(days.map((d) => dayLong[d.dayOfWeek]).join(', '));
@@ -39,8 +66,18 @@
   });
 
   async function saveBody() {
+    // Nama disimpan di dua tempat: profil Firestore dan displayName Firebase Auth,
+    // karena sapaan di halaman Hari ini membaca dari Auth.
+    const name = form.name.trim();
+    if (name && name !== $user?.displayName) {
+      try {
+        await updateDisplayName(name);
+      } catch {
+        /* nama di profil tetap tersimpan walau Auth menolak */
+      }
+    }
     await saveProfile({
-      name: form.name.trim(),
+      name,
       sex: form.sex,
       age: Number(form.age) || null,
       height: Number(form.height) || null,
@@ -115,6 +152,108 @@
     await logout();
     goto('/masuk');
   }
+
+  // --- Ekspor data ---
+
+  let exportNote = $state('');
+
+  function stamp() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function exportCsv() {
+    downloadText(`gym-daily-latihan-${stamp()}.csv`, logsToCsv($allLogs), 'text/csv');
+    downloadText(`gym-daily-berat-${stamp()}.csv`, weightsToCsv($weights), 'text/csv');
+    if ($measurements.length) {
+      downloadText(
+        `gym-daily-ukuran-${stamp()}.csv`,
+        measurementsToCsv($measurements, measurementFields),
+        'text/csv'
+      );
+    }
+    exportNote = 'Berkas CSV diunduh. Satu baris per set, siap dibuka di spreadsheet.';
+  }
+
+  function exportJson() {
+    downloadText(
+      `gym-daily-cadangan-${stamp()}.json`,
+      toJsonBackup({
+        profile: $profile,
+        logs: $allLogs,
+        weights: $weights,
+        measurements: $measurements
+      }),
+      'application/json'
+    );
+    exportNote = 'Cadangan JSON diunduh. Berisi seluruh data yang ada di perangkat ini.';
+  }
+
+  // --- Kelola akun ---
+
+  let accountPanel = $state(null); // null | 'sandi' | 'email' | 'hapus'
+  let accountNote = $state('');
+  let accountError = $state('');
+  let busy = $state(false);
+
+  let currentPassword = $state('');
+  let newPassword = $state('');
+  let newEmail = $state('');
+  let deleteConfirm = $state('');
+
+  function resetAccountForm() {
+    currentPassword = '';
+    newPassword = '';
+    newEmail = '';
+    deleteConfirm = '';
+    accountError = '';
+  }
+
+  function openPanel(name) {
+    resetAccountForm();
+    accountNote = '';
+    accountPanel = accountPanel === name ? null : name;
+  }
+
+  /** Bungkus aksi Firebase supaya pesan errornya konsisten dalam bahasa Indonesia. */
+  async function run(action, successMessage) {
+    busy = true;
+    accountError = '';
+    try {
+      await action();
+      accountNote = successMessage;
+      accountPanel = null;
+      resetAccountForm();
+    } catch (e) {
+      accountError = authError(e?.code);
+    } finally {
+      busy = false;
+    }
+  }
+
+  const submitPassword = () =>
+    run(async () => {
+      if (newPassword.length < 6) throw { code: 'auth/weak-password' };
+      await changePassword(currentPassword, newPassword);
+    }, 'Kata sandi berhasil diganti.');
+
+  const submitEmail = () =>
+    run(async () => {
+      await changeEmail(currentPassword, newEmail.trim());
+    }, `Tautan verifikasi dikirim ke ${newEmail.trim()}. Email lama tetap berlaku sampai tautannya diklik.`);
+
+  const submitReset = () =>
+    run(async () => {
+      await resetPassword($user?.email);
+    }, `Tautan atur ulang kata sandi dikirim ke ${$user?.email}.`);
+
+  const submitDelete = () =>
+    run(async () => {
+      // Data Firestore dihapus lebih dulu; setelah akun hilang, aturan keamanan
+      // per-uid membuat dokumennya tidak bisa disentuh siapa pun lagi.
+      await deleteAllUserData();
+      await deleteAccount(currentPassword);
+      goto('/masuk');
+    }, 'Akun dan seluruh datanya sudah dihapus.');
 </script>
 
 <header>
@@ -193,27 +332,27 @@
     </div>
   {:else}
     <dl class="mt-3 space-y-2 text-sm">
-      <div class="flex justify-between border-t border-white/5 pt-2 first:border-0 first:pt-0">
+      <div class="flex justify-between border-t border-hair/5 pt-2 first:border-0 first:pt-0">
         <dt class="text-mute">Jenis kelamin</dt>
         <dd>{$profile?.sex ?? '—'}</dd>
       </div>
-      <div class="flex justify-between border-t border-white/5 pt-2">
+      <div class="flex justify-between border-t border-hair/5 pt-2">
         <dt class="text-mute">Usia</dt>
         <dd class="num">{$profile?.age ? `${$profile.age} tahun` : '—'}</dd>
       </div>
-      <div class="flex justify-between border-t border-white/5 pt-2">
+      <div class="flex justify-between border-t border-hair/5 pt-2">
         <dt class="text-mute">Tinggi</dt>
         <dd class="num">{$profile?.height ? `${$profile.height} cm` : '—'}</dd>
       </div>
-      <div class="flex justify-between border-t border-white/5 pt-2">
+      <div class="flex justify-between border-t border-hair/5 pt-2">
         <dt class="text-mute">Berat</dt>
         <dd class="num">{$profile?.weight ? `${$profile.weight} kg` : '—'}</dd>
       </div>
-      <div class="flex justify-between border-t border-white/5 pt-2">
+      <div class="flex justify-between border-t border-hair/5 pt-2">
         <dt class="text-mute">Aktivitas</dt>
         <dd>{activityLevels.find((a) => a.id === $profile?.activity)?.name ?? '—'}</dd>
       </div>
-      <div class="flex justify-between border-t border-white/5 pt-2">
+      <div class="flex justify-between border-t border-hair/5 pt-2">
         <dt class="text-mute">Tujuan</dt>
         <dd>{goals.find((g) => g.id === $profile?.goal)?.name ?? '—'}</dd>
       </div>
@@ -235,6 +374,21 @@
   <a class="btn-ghost mt-4 w-full" href="/programs">
     {program ? 'Ganti program' : 'Pilih program'}
   </a>
+</section>
+
+<section class="card mt-4">
+  <h2 class="font-semibold">Tampilan</h2>
+  <p class="mt-1 text-xs text-mute">Gym yang terang kadang lebih nyaman dengan tema terang.</p>
+  <div class="mt-3 flex gap-2">
+    {#each themes as t}
+      <button
+        class="chip flex-1 {$theme === t.id ? 'bg-plate-yellow text-rubber' : 'bg-rack text-mute'}"
+        onclick={() => { setTheme(t.id); saveProfile({ theme: t.id }); }}
+      >
+        {t.label}
+      </button>
+    {/each}
+  </div>
 </section>
 
 <section class="card mt-4">
@@ -374,9 +528,113 @@
   {/if}
 </section>
 
-<section class="mt-4">
-  <button class="btn-ghost w-full text-plate-red" onclick={handleLogout}>Keluar</button>
+<section class="card mt-4">
+  <h2 class="font-semibold">Ekspor data</h2>
+  <p class="mt-1 text-xs text-mute">
+    Datamu milikmu. CSV untuk dianalisis di spreadsheet, JSON sebagai cadangan lengkap.
+  </p>
+  <div class="mt-4 space-y-2">
+    <button class="btn-ghost w-full" onclick={exportCsv}>Unduh CSV (latihan, berat, ukuran)</button>
+    <button class="btn-ghost w-full" onclick={exportJson}>Unduh cadangan JSON</button>
+  </div>
+  {#if exportNote}<p class="mt-3 text-xs text-plate-green">{exportNote}</p>{/if}
+  <p class="mt-3 text-[11px] text-mute">
+    Yang terekspor adalah data yang sudah dimuat di perangkat ini: tahun berjalan, ditambah tahun
+    lama yang pernah kamu buka di halaman Riwayat.
+  </p>
 </section>
+
+<section class="card mt-4">
+  <h2 class="font-semibold">Akun</h2>
+  <p class="mt-1 text-xs text-mute">{$user?.email ?? ''}</p>
+
+  {#if accountNote}
+    <p class="mt-3 rounded-xl bg-plate-green/15 p-3 text-xs text-plate-green">{accountNote}</p>
+  {/if}
+
+  <div class="mt-4 space-y-2">
+    <button class="btn-ghost w-full" onclick={() => openPanel('sandi')}>Ganti kata sandi</button>
+    <button class="btn-ghost w-full" onclick={() => openPanel('email')}>Ganti email</button>
+    <button class="btn-ghost w-full" onclick={submitReset} disabled={busy}>
+      Kirim tautan atur ulang kata sandi
+    </button>
+  </div>
+
+  {#if accountPanel === 'sandi'}
+    <div class="mt-4 rounded-xl bg-rack p-3">
+      <label class="block text-xs text-mute">
+        Kata sandi sekarang
+        <input class="field mt-1 text-sm" type="password" autocomplete="current-password" bind:value={currentPassword} />
+      </label>
+      <label class="mt-3 block text-xs text-mute">
+        Kata sandi baru (minimal 6 karakter)
+        <input class="field mt-1 text-sm" type="password" autocomplete="new-password" bind:value={newPassword} />
+      </label>
+      <button class="btn-primary mt-3 w-full" onclick={submitPassword} disabled={busy}>
+        {busy ? 'Menyimpan...' : 'Simpan kata sandi baru'}
+      </button>
+    </div>
+  {/if}
+
+  {#if accountPanel === 'email'}
+    <div class="mt-4 rounded-xl bg-rack p-3">
+      <label class="block text-xs text-mute">
+        Kata sandi sekarang
+        <input class="field mt-1 text-sm" type="password" autocomplete="current-password" bind:value={currentPassword} />
+      </label>
+      <label class="mt-3 block text-xs text-mute">
+        Email baru
+        <input class="field mt-1 text-sm" type="email" autocomplete="email" bind:value={newEmail} />
+      </label>
+      <button class="btn-primary mt-3 w-full" onclick={submitEmail} disabled={busy}>
+        {busy ? 'Mengirim...' : 'Kirim verifikasi ke email baru'}
+      </button>
+      <p class="mt-2 text-[11px] text-mute">
+        Kamu tetap masuk dengan email lama sampai tautan verifikasinya diklik.
+      </p>
+    </div>
+  {/if}
+
+  {#if accountError}
+    <p class="mt-3 text-xs text-plate-red">{accountError}</p>
+  {/if}
+</section>
+
+<section class="mt-4 space-y-2">
+  <button class="btn-ghost w-full" onclick={handleLogout}>Keluar</button>
+  <button class="btn-ghost w-full text-plate-red" onclick={() => openPanel('hapus')}>
+    Hapus akun
+  </button>
+</section>
+
+{#if accountPanel === 'hapus'}
+  <section class="card mt-3 border-plate-red/40">
+    <h2 class="font-semibold text-plate-red">Hapus akun permanen</h2>
+    <p class="mt-2 text-xs text-mute">
+      Seluruh catatan latihan, berat badan, ukuran tubuh, dan profilmu akan dihapus. Tindakan ini
+      tidak bisa dibatalkan. Unduh cadangan JSON dulu kalau kamu masih ingin menyimpan datanya.
+    </p>
+    <label class="mt-4 block text-xs text-mute">
+      Kata sandi sekarang
+      <input class="field mt-1 text-sm" type="password" autocomplete="current-password" bind:value={currentPassword} />
+    </label>
+    <label class="mt-3 block text-xs text-mute">
+      Ketik <span class="font-semibold text-chalk">HAPUS</span> untuk mengonfirmasi
+      <input class="field mt-1 text-sm" bind:value={deleteConfirm} />
+    </label>
+    <button
+      class="btn mt-4 w-full bg-plate-red text-chalk disabled:opacity-40"
+      onclick={submitDelete}
+      disabled={busy || deleteConfirm !== 'HAPUS' || !currentPassword}
+    >
+      {busy ? 'Menghapus...' : 'Hapus akun saya selamanya'}
+    </button>
+    <button class="mt-2 w-full text-xs text-mute underline underline-offset-4" onclick={() => (accountPanel = null)}>
+      Batal
+    </button>
+    {#if accountError}<p class="mt-3 text-xs text-plate-red">{accountError}</p>{/if}
+  </section>
+{/if}
 
 <p class="mt-5 text-xs text-mute">
   Data tubuh dipakai hanya untuk menghitung perkiraan kebutuhan kalori dan tersimpan di akunmu

@@ -3,6 +3,8 @@
   import { logWeight, dayKey, profile, streak, weights, yearLogs } from '$lib/stores/data';
   import { dayShort, keyToDate, monthShort, weekKeys } from '$lib/utils/date';
   import { exerciseHistory, exerciseNames, personalRecord, trimNumber } from '$lib/utils/workout';
+  import { achievements, nextTarget, recordBoard } from '$lib/utils/achievements';
+  import { waterGlasses } from '$lib/utils/nutrition';
 
   const year = new Date().getFullYear();
 
@@ -50,6 +52,32 @@
       })
       .join(' ');
     return { path, first: points[0], last: points[points.length - 1], min, max };
+  });
+
+  // --- Lencana, rekor, dan air ---
+
+  const badges = $derived(achievements($yearLogs, $profile));
+  const earnedBadges = $derived(badges.filter((b) => b.earned));
+  const target = $derived(nextTarget($yearLogs, $profile));
+  const records = $derived(recordBoard($yearLogs).slice(0, 8));
+
+  const waterTarget = $derived(waterGlasses($profile?.weight));
+
+  /** Rata-rata air 14 hari terakhir yang punya catatan. */
+  const waterTrend = $derived.by(() => {
+    const recent = $yearLogs
+      .filter((l) => l.id <= $dayKey)
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .slice(-14);
+    if (!recent.length) return null;
+    const total = recent.reduce((sum, l) => sum + (Number(l.water) || 0), 0);
+    const hit = recent.filter((l) => (Number(l.water) || 0) >= waterTarget).length;
+    return {
+      days: recent,
+      average: total / recent.length,
+      hit,
+      percent: Math.round((hit / recent.length) * 100)
+    };
   });
 
   // --- Beban per gerakan ---
@@ -105,7 +133,10 @@
 <header>
   <h1 class="num text-3xl font-bold">Progres</h1>
   <p class="mt-1 text-sm text-mute">Rekap kehadiran latihan dan perubahan berat badan tahun {year}.</p>
-  <a class="btn-ghost mt-3 w-full" href="/riwayat">Buka riwayat harian</a>
+  <div class="mt-3 flex gap-2">
+    <a class="btn-ghost flex-1" href="/riwayat">Riwayat harian</a>
+    <a class="btn-ghost flex-1" href="/ukuran">Ukuran tubuh</a>
+  </div>
 </header>
 
 <div class="mt-5 grid grid-cols-2 gap-3">
@@ -157,6 +188,81 @@
     {/each}
   </ul>
 </section>
+
+<section class="card mt-4">
+  <h2 class="font-semibold">Lencana</h2>
+  {#if earnedBadges.length}
+    <div class="mt-3 flex flex-wrap gap-2">
+      {#each earnedBadges as b (b.id)}
+        <span class="chip bg-plate-yellow/15 text-plate-yellow">{b.icon} {b.label}</span>
+      {/each}
+    </div>
+  {:else}
+    <p class="mt-3 text-sm text-mute">
+      Belum ada lencana. Yang pertama datang setelah 10 sesi latihan selesai.
+    </p>
+  {/if}
+
+  {#if target}
+    <div class="mt-4 border-t border-hair/5 pt-3">
+      <div class="flex items-baseline justify-between text-xs">
+        <span class="text-mute">Berikutnya: {target.icon} {target.label}</span>
+        <span class="num text-mute">{target.percent}%</span>
+      </div>
+      <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-rack">
+        <div class="h-full rounded-full bg-plate-yellow" style="width: {target.percent}%"></div>
+      </div>
+    </div>
+  {/if}
+</section>
+
+{#if records.length}
+  <section class="card mt-4">
+    <h2 class="font-semibold">Rekor pribadi</h2>
+    <p class="mt-1 text-xs text-mute">Beban terberat yang pernah kamu catat per gerakan.</p>
+    <ul class="mt-3 space-y-2">
+      {#each records as r (r.name)}
+        <li class="flex items-baseline justify-between gap-3 border-t border-hair/5 pt-2 text-sm first:border-0 first:pt-0">
+          <span class="min-w-0 truncate">{r.name}</span>
+          <span class="num shrink-0 text-right">
+            {trimNumber(r.topKg)} kg
+            <span class="block text-[10px] text-mute">{r.date}</span>
+          </span>
+        </li>
+      {/each}
+    </ul>
+  </section>
+{/if}
+
+{#if waterTrend}
+  <section class="card mt-4">
+    <div class="flex items-baseline justify-between">
+      <h2 class="font-semibold">Air minum</h2>
+      <span class="num text-sm text-mute">
+        rata-rata {trimNumber(waterTrend.average)} / {waterTarget} gelas
+      </span>
+    </div>
+    <p class="mt-1 text-xs text-mute">
+      Target tercapai {waterTrend.hit} dari {waterTrend.days.length} hari terakhir
+      ({waterTrend.percent}%).
+    </p>
+    <div class="mt-3 flex items-end gap-1" role="img" aria-label="Grafik air minum 14 hari terakhir">
+      {#each waterTrend.days as d (d.id)}
+        {@const glasses = Number(d.water) || 0}
+        {@const height = waterTarget ? Math.min(100, (glasses / waterTarget) * 100) : 0}
+        <div class="flex flex-1 flex-col items-center gap-1">
+          <div class="flex h-14 w-full items-end rounded-sm bg-rack">
+            <div
+              class="w-full rounded-sm {glasses >= waterTarget ? 'bg-plate-blue' : 'bg-plate-blue/40'}"
+              style="height: {Math.max(4, height)}%"
+              title="{d.id}: {glasses} gelas"
+            ></div>
+          </div>
+        </div>
+      {/each}
+    </div>
+  </section>
+{/if}
 
 <section class="card mt-4">
   <h2 class="font-semibold">Beban per gerakan</h2>
@@ -222,7 +328,7 @@
     {/if}
 
     {#if liftHistory.length}
-      <ul class="mt-4 space-y-2 border-t border-white/5 pt-3">
+      <ul class="mt-4 space-y-2 border-t border-hair/5 pt-3">
         {#each liftHistory.slice(-5).reverse() as row (row.date)}
           <li class="flex items-baseline justify-between gap-3 text-xs">
             <span class="num shrink-0 text-mute">{row.date}</span>

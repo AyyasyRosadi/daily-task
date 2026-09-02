@@ -12,6 +12,16 @@ siap dideploy ke Vercel.
   Streak putus sendiri kalau ada hari yang terlewat.
 - **Program** — 5 program siap pakai (Full Body Pemula, Push Pull Legs, Upper Lower, Kalistenik di
   Rumah, Bakar Lemak). Pilih satu, jadwalnya langsung mengikuti hari.
+- **Program buatan sendiri** — penyusun di `/programs/susun`: tentukan hari latihan, pilih gerakan
+  dari pustaka, atur set dan repetisi. Tersimpan di `users/{uid}/programs` dan diperlakukan sama
+  persis dengan program bawaan, termasuk saat diekspor ke kalender.
+- **Panduan gerakan** — 68 gerakan dengan 2-3 poin form dan satu kesalahan yang paling sering
+  terjadi, dibuka langsung dari baris gerakan.
+- **Ganti gerakan** — alat sedang dipakai? Pilih pengganti dari kelompok otot yang sama; alat yang
+  berbeda diprioritaskan.
+- **Progresi & minggu pemulihan** — saran beban tiap sesi (naik / tahan / turun) berdasarkan apakah
+  sesi lalu tuntas, dengan setiap minggu ke-4 otomatis jadi minggu deload. Semuanya saran, bukan
+  perubahan otomatis.
 - **Catatan beban per set** — isi beban dan repetisi tiap set, bukan sekadar centang. Beban set
   sebelumnya dan rekor pribadi tampil sebagai acuan, dan set bisa ditambah/dikurangi saat sesi.
 - **Timer istirahat** — hitungan mundur otomatis begitu satu set ditandai selesai, lengkap dengan
@@ -20,7 +30,18 @@ siap dideploy ke Vercel.
   berat badan, dan catatan sesi. Tahun sebelumnya dimuat sekali jalan saat bulannya dibuka.
 - **Progres** — rekap minggu berjalan, grafik 12 bulan, rekor streak, grafik berat badan, serta
   grafik beban per gerakan dengan perkiraan 1RM (Epley) dan rekor pribadi.
-- **Nutrisi** — kalkulator kalori (Mifflin-St Jeor) + target makro dan menu harian per tujuan.
+- **Nutrisi** — kalkulator kalori (Mifflin-St Jeor) + target makro dan menu harian per tujuan,
+  ditambah pencatat makan harian dengan ~70 makanan Indonesia dan sisa kalori berjalan.
+- **Ukuran tubuh** — pinggang, dada, lengan, paha, pinggul, bahu; dengan selisih terhadap
+  pengukuran sebelumnya dan grafik per bagian.
+- **Kelola akun & ekspor** — ganti kata sandi/email, atur ulang lewat email, hapus akun berikut
+  seluruh datanya, dan unduh data sendiri sebagai CSV (satu baris per set) atau cadangan JSON.
+- **Lencana & rekor** — lencana beruntun, jumlah sesi, total volume, dan ragam gerakan; ditambah
+  papan rekor pribadi per gerakan. Semuanya dihitung ulang dari data, tidak disimpan terpisah, jadi
+  tidak pernah basi.
+- **Tren air minum** — rata-rata dan persentase target tercapai dalam 14 hari terakhir.
+- **Tema terang & gelap** — bisa juga ikut pengaturan sistem. Warna netral memakai CSS variable,
+  jadi pergantian tema tidak menyentuh satu pun kelas di komponen.
 - **Tips** — kumpulan tips latihan, nutrisi, istirahat, dan kebiasaan.
 - **Profil** — data diri dan data tubuh, ringkasan streak, program aktif, pengaturan pengingat, dan
   ekspor jadwal ke kalender.
@@ -39,21 +60,14 @@ siap dideploy ke Vercel.
 2. **Authentication → Sign-in method → Email/Password → Enable.**
 3. **Firestore Database → Create database** (mode production, region `asia-southeast2` untuk Jakarta).
 4. **Project settings → Your apps → Web app (`</>`)** → daftarkan app, salin nilai `firebaseConfig`.
-5. Tempel aturan keamanan ini di **Firestore → Rules → Publish**:
+5. Pasang aturan keamanan dari `firestore.rules` di repo ini — jangan biarkan mode uji berjalan.
+   Salin isinya ke **Firestore → Rules → Publish**, atau pasang lewat CLI:
 
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
-      match /{document=**} {
-        allow read, write: if request.auth != null && request.auth.uid == uid;
-      }
-    }
-  }
-}
-```
+   ```bash
+   firebase deploy --only firestore:rules
+   ```
+
+   Rinciannya ada di bagian [Aturan keamanan Firestore](#aturan-keamanan-firestore) di bawah.
 
 ## 2. Jalankan di lokal
 
@@ -90,6 +104,34 @@ PUBLIC_FIREBASE_APP_ID
 Terakhir, tambahkan domain Vercel kamu di **Firebase → Authentication → Settings → Authorized
 domains**. Kalau dilewat, login akan ditolak di production.
 
+## Aturan keamanan Firestore
+
+Aturannya ada di `firestore.rules` dan ikut diversikan bersama kode. Prinsipnya satu: seluruh data
+hidup di bawah `users/{uid}` dan hanya pemilik uid itu yang boleh menyentuhnya. Tidak ada koleksi
+publik, jadi tidak ada jalur baca lintas akun.
+
+```bash
+npm install -g firebase-tools     # sekali saja
+firebase login
+firebase deploy --only firestore:rules
+```
+
+Aturan ini **wajib dipasang**. Proyek Firestore yang baru dibuat berjalan dalam mode uji yang
+terbuka untuk siapa pun dan kedaluwarsa setelah 30 hari.
+
+Untuk mencoba tanpa menyentuh data asli: `firebase emulators:start --only firestore,auth`.
+
+## Tes
+
+```bash
+npm test          # sekali jalan
+npm run test:watch
+```
+
+Vitest menguji logika murni di `src/lib`: pencatatan set, aturan progresi, pembangkit iCalendar,
+ekspor CSV/JSON, dan keutuhan pustaka gerakan terhadap program bawaan. Tes tidak menyentuh Firebase
+maupun merender komponen — modul `$app/*` dan `$env/*` di-stub di `tests/stubs/`.
+
 ## Struktur data Firestore
 
 ```
@@ -106,6 +148,16 @@ users/{uid}/logs/{YYYY-MM-DD}
 
 users/{uid}/weights/{YYYY-MM-DD}
   date, kg
+
+users/{uid}/measurements/{YYYY-MM-DD}
+  date, pinggang, dada, lengan, paha, pinggul, bahu   (cm, hanya yang diisi)
+
+users/{uid}/meals/{YYYY-MM-DD}
+  date, items: [{ name, porsi, slot, servings, kcal, p, k, l, at }]
+
+users/{uid}/programs/{slug}
+  name, level, weeks, daysPerWeek, place, goal, summary, updatedAt,
+  schedule: { <0-6>: { title, focus, minutes, exercises: [...] } }
 ```
 
 `logs[]` di dalam `tasks` menyimpan beban dan repetisi aktual per set. Catatan lama yang belum
@@ -114,9 +166,15 @@ yang hilang sebagai set kosong, jadi tidak perlu migrasi data.
 
 ## Menambah program sendiri
 
-Semua program ada di `src/lib/data/programs.js`. Tambahkan satu objek baru ke array `programs`
-dengan `schedule` yang dikunci hari (`0` Minggu sampai `6` Sabtu). Hari tanpa entri otomatis jadi
-hari istirahat. Menu makanan ada di `src/lib/data/foods.js`, tips di `src/lib/data/tips.js`.
+Cara termudah: pakai penyusun di dalam aplikasi lewat **Program → Susun program sendiri**.
+
+Untuk menambah program bawaan bagi semua pengguna, edit `src/lib/data/programs.js`: tambahkan satu
+objek ke array `programs` dengan `schedule` yang dikunci hari (`0` Minggu sampai `6` Sabtu). Hari
+tanpa entri otomatis jadi hari istirahat.
+
+Berkas data lain: pustaka gerakan dan panduan formnya di `src/lib/data/exercises.js`, basis data
+makanan di `src/lib/data/foodItems.js`, menu contoh di `src/lib/data/foods.js`, tips di
+`src/lib/data/tips.js`.
 
 ## Catatan
 

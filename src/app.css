@@ -2,13 +2,47 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Palet ditulis sebagai channel RGB supaya Tailwind bisa menerapkan opacity di
+ * atasnya. Tema gelap adalah bawaan; `html.light` menukar nilainya, dan seluruh
+ * kelas warna di komponen ikut berubah tanpa perlu diubah satu per satu.
+ */
 @layer base {
+  :root {
+    --c-rubber: 15 20 18;
+    --c-deck: 23 30 27;
+    --c-rack: 33 42 38;
+    --c-chalk: 241 238 231;
+    --c-mute: 143 160 152;
+    --c-hair: 255 255 255;
+
+    /* Lapisan tipis di atas latar, dipakai untuk kotak kalender dan bar. */
+    --overlay-weak: rgba(241, 238, 231, 0.04);
+    --overlay: rgba(241, 238, 231, 0.08);
+    --overlay-strong: rgba(241, 238, 231, 0.15);
+    color-scheme: dark;
+  }
+
+  html.light {
+    --c-rubber: 250 249 246;
+    --c-deck: 255 255 255;
+    --c-rack: 238 236 230;
+    --c-chalk: 26 32 29;
+    --c-mute: 106 118 111;
+    --c-hair: 15 20 18;
+
+    --overlay-weak: rgba(15, 20, 18, 0.04);
+    --overlay: rgba(15, 20, 18, 0.08);
+    --overlay-strong: rgba(15, 20, 18, 0.16);
+    color-scheme: light;
+  }
+
   html {
     -webkit-tap-highlight-color: transparent;
   }
   body {
-    background-color: #0f1412;
-    color: #f1eee7;
+    background-color: rgb(var(--c-rubber));
+    color: rgb(var(--c-chalk));
   }
   :focus-visible {
     outline: 2px solid #f0b429;
@@ -26,7 +60,7 @@
     @apply font-display tabular-nums leading-none;
   }
   .card {
-    @apply rounded-2xl bg-deck border border-white/5 p-4;
+    @apply rounded-2xl bg-deck border border-hair/5 p-4;
   }
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-colors;
@@ -35,10 +69,10 @@
     @apply btn bg-plate-yellow text-rubber hover:bg-[#ffc543];
   }
   .btn-ghost {
-    @apply btn bg-rack text-chalk hover:bg-[#2b3630];
+    @apply btn bg-rack text-chalk hover:bg-rack/70;
   }
   .field {
-    @apply w-full rounded-xl bg-rack border border-white/10 px-4 py-3 text-chalk placeholder:text-mute/70;
+    @apply w-full rounded-xl bg-rack border border-hair/10 px-4 py-3 text-chalk placeholder:text-mute/70;
   }
   .chip {
     @apply rounded-full px-3 py-1.5 text-xs font-semibold transition-colors;

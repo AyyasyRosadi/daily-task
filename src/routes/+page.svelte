@@ -1,7 +1,7 @@
 <script>
   import BarbellBar from '$lib/components/BarbellBar.svelte';
   import TaskRow from '$lib/components/TaskRow.svelte';
-  import { getProgram } from '$lib/data/programs.js';
+  import { programMap } from '$lib/stores/programs';
   import { user } from '$lib/stores/auth';
   import {
     addSet,
@@ -16,16 +16,19 @@
     toggleTask,
     setWater,
     streak,
+    swapExercise,
     syncing,
     todayLog,
     yearLogs
   } from '$lib/stores/data';
+  import { exercises } from '$lib/data/exercises.js';
   import { DEFAULT_REST_SECONDS, startRest } from '$lib/stores/rest';
   import { dayShort, formatLong, keyToDate, weekKeys } from '$lib/utils/date';
   import { waterGlasses } from '$lib/utils/nutrition';
   import { lastPerformance, logVolume, personalRecord, trimNumber } from '$lib/utils/workout';
+  import { programProgress, suggestLoad } from '$lib/utils/progression';
 
-  const program = $derived(getProgram($profile?.activeProgram));
+  const program = $derived($programMap.get($profile?.activeProgram) ?? null);
   const tasks = $derived($todayLog?.tasks ?? []);
   const done = $derived(tasks.filter((t) => t.done).length);
   const percent = $derived(tasks.length ? Math.round((done / tasks.length) * 100) : 0);
@@ -41,6 +44,7 @@
   );
 
   const volume = $derived(logVolume($todayLog));
+  const progress = $derived(programProgress($profile, program, $dayKey));
 
   let openTask = $state(null);
   const toggleExpand = (id) => (openTask = openTask === id ? null : id);
@@ -87,7 +91,7 @@
       {greeting()}{$user?.displayName ? `, ${$user.displayName.split(' ')[0]}` : ''}
     </h1>
   </div>
-  <div class="rounded-xl border border-white/5 bg-deck px-3 py-2 text-center">
+  <div class="rounded-xl border border-hair/5 bg-deck px-3 py-2 text-center">
     <p class="num text-2xl font-bold text-plate-yellow">{$streak}</p>
     <p class="text-[10px] text-mute">hari beruntun</p>
   </div>
@@ -102,14 +106,14 @@
     >
       <span class="text-[10px] {d.isToday ? 'text-chalk' : 'text-mute'}">{d.day}</span>
       <span
-        class="h-8 w-full rounded-md border {d.isToday ? 'border-plate-yellow/60' : 'border-white/5'}"
+        class="h-8 w-full rounded-md border {d.isToday ? 'border-plate-yellow/60' : 'border-hair/5'}"
         style="background: {d.log?.completed
           ? '#31A05F'
           : d.log && !d.log.isRest
             ? 'rgba(49,160,95,0.28)'
             : d.future
-              ? 'rgba(241,238,231,0.04)'
-              : 'rgba(241,238,231,0.08)'}"
+              ? 'var(--overlay-weak)'
+              : 'var(--overlay)'}"
         title={d.key}
       ></span>
     </a>
@@ -141,6 +145,40 @@
       {/if}
     </div>
 
+    {#if progress && !progress.finished}
+      <div class="mt-4 rounded-xl border px-4 py-3 {progress.deload
+        ? 'border-plate-blue/40 bg-plate-blue/10'
+        : 'border-hair/5 bg-deck'}">
+        <div class="flex items-baseline justify-between gap-3">
+          <span class="text-sm font-medium">
+            {progress.deload ? 'Minggu pemulihan' : `Minggu ${progress.week}`}
+            <span class="text-mute">dari {progress.total}</span>
+          </span>
+          <span class="num text-xs text-mute">{progress.percent}%</span>
+        </div>
+        <div class="mt-2 h-1 overflow-hidden rounded-full bg-rack">
+          <div
+            class="h-full rounded-full {progress.deload ? 'bg-plate-blue' : 'bg-plate-yellow'}"
+            style="width: {progress.percent}%"
+          ></div>
+        </div>
+        {#if progress.deload}
+          <p class="mt-2 text-xs text-mute">
+            Turunkan beban sekitar 40% minggu ini. Pemulihan yang terencana membuat beban naik lebih
+            jauh di minggu berikutnya.
+          </p>
+        {/if}
+      </div>
+    {:else if progress?.finished}
+      <div class="mt-4 rounded-xl border border-plate-green/40 bg-plate-green/10 px-4 py-3">
+        <p class="text-sm text-plate-green">
+          Program {progress.total} minggu sudah tuntas. Pilih program baru atau ulangi dengan beban
+          yang lebih berat.
+        </p>
+        <a class="btn-ghost mt-3 w-full" href="/programs">Lihat program</a>
+      </div>
+    {/if}
+
     {#if $todayLog.isRest}
       <div class="card mt-4">
         <p class="text-sm text-chalk">
@@ -168,8 +206,10 @@
             onlogset={handleLogSet}
             onaddset={addSet}
             onremoveset={removeSet}
+            onswap={(id, name) => swapExercise(id, name, exercises[name]?.group)}
             last={lastPerformance($yearLogs, task.name, $dayKey)}
             record={personalRecord($yearLogs, task.name)}
+            suggestion={suggestLoad($yearLogs, task, $dayKey, { deload: progress?.deload })}
             expanded={openTask === task.id}
             ontoggleexpand={toggleExpand}
           />
@@ -203,7 +243,7 @@
           onclick={() => setWater(($todayLog.water ?? 0) === i + 1 ? i : i + 1)}
           class="h-8 w-6 rounded-md border transition-colors {i < ($todayLog.water ?? 0)
             ? 'border-plate-blue bg-plate-blue'
-            : 'border-white/15'}"
+            : 'border-hair/15'}"
         ></button>
       {/each}
     </div>

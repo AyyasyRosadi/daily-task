@@ -1,6 +1,6 @@
 <script>
   import { goto } from '$app/navigation';
-  import { programs } from '$lib/data/programs.js';
+  import { allPrograms, deleteCustomProgram } from '$lib/stores/programs';
   import { chooseProgram, profile } from '$lib/stores/data';
   import { dayShort } from '$lib/utils/date';
 
@@ -12,6 +12,14 @@
     Menengah: '#F0B429',
     Lanjutan: '#D6353B'
   };
+
+  let removing = $state(null);
+
+  async function remove(id, name) {
+    removing = id;
+    await deleteCustomProgram(id);
+    removing = null;
+  }
 
   async function pick(id) {
     saving = id;
@@ -26,15 +34,19 @@
   <p class="mt-1 text-sm text-mute">
     Satu program berjalan pada satu waktu. Jadwalnya otomatis muncul di halaman Hari ini sesuai hari.
   </p>
+  <a class="btn-primary mt-4 w-full" href="/programs/susun">Susun program sendiri</a>
 </header>
 
 <div class="mt-6 space-y-3">
-  {#each programs as p (p.id)}
+  {#each $allPrograms as p (p.id)}
     {@const active = $profile?.activeProgram === p.id}
-    <article class="rounded-2xl border bg-deck p-4 {active ? 'border-plate-yellow/60' : 'border-white/5'}">
+    <article class="rounded-2xl border bg-deck p-4 {active ? 'border-plate-yellow/60' : 'border-hair/5'}">
       <div class="flex items-start justify-between gap-3">
         <div>
           <h2 class="num text-2xl font-bold">{p.name}</h2>
+          {#if p.custom}
+            <span class="chip mt-1 inline-block bg-plate-blue/20 text-plate-blue">Buatan sendiri</span>
+          {/if}
           <p class="text-xs text-mute">
             {p.daysPerWeek} hari per minggu &middot; {p.weeks} minggu &middot; {p.place}
           </p>
@@ -58,7 +70,7 @@
       </button>
 
       {#if openId === p.id}
-        <ul class="mt-3 space-y-2 border-t border-white/5 pt-3">
+        <ul class="mt-3 space-y-2 border-t border-hair/5 pt-3">
           {#each [1, 2, 3, 4, 5, 6, 0] as d}
             {@const s = p.schedule[d]}
             <li class="flex gap-3 text-sm">
@@ -76,6 +88,19 @@
             </li>
           {/each}
         </ul>
+      {/if}
+
+      {#if p.custom}
+        <div class="mt-3 flex gap-2">
+          <a class="chip flex-1 bg-rack text-center text-chalk" href="/programs/susun?id={p.id}">Ubah</a>
+          <button
+            class="chip flex-1 bg-rack text-plate-red"
+            onclick={() => remove(p.id, p.name)}
+            disabled={removing === p.id || active}
+          >
+            {active ? 'Sedang dipakai' : removing === p.id ? 'Menghapus...' : 'Hapus'}
+          </button>
+        </div>
       {/if}
 
       {#if active}

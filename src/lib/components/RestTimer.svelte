@@ -16,7 +16,7 @@
     role="status"
     aria-live="polite"
   >
-    <div class="mx-auto max-w-lg overflow-hidden rounded-2xl border border-white/10 bg-deck shadow-lg shadow-black/40">
+    <div class="mx-auto max-w-lg overflow-hidden rounded-2xl border border-hair/10 bg-deck shadow-lg shadow-black/40">
       <div
         class="h-1 bg-plate-yellow transition-[width] duration-300 ease-linear"
         style="width: {progress * 100}%"
